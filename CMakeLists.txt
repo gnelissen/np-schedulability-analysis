@@ -27,6 +27,8 @@ if (COLLECT_SCHEDULE_GRAPHS)
 elseif (PARALLEL_RUN)
     find_package(TBB REQUIRED)
     set(TBB_LIB TBB::tbb)
+    find_path(TBB_INCLUDE_DIR NAMES tbb/task_scheduler_init.h)
+    include_directories(${TBB_INCLUDE_DIR})
     add_compile_definitions(CONFIG_PARALLEL)
 endif ()
 
