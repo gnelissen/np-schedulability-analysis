@@ -17,19 +17,19 @@ TEST_CASE("[IIP] P-RM example (Figure 1)")
 {
 	Uniproc::State_space<dtime_t>::Workload jobs{
 		// high-frequency task tau_1
-		Job<dtime_t>{1, I( 0,  0), I(1, 1), 10, 1, 1},
-		Job<dtime_t>{2, I(10, 10), I(1, 1), 20, 1, 1},
-		Job<dtime_t>{3, I(20, 20), I(1, 1), 30, 1, 1},
-		Job<dtime_t>{4, I(30, 30), I(1, 1), 40, 1, 1},
-		Job<dtime_t>{5, I(40, 40), I(1, 1), 50, 1, 1},
-		Job<dtime_t>{6, I(50, 50), I(1, 1), 60, 1, 1},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(1, 1), 10, 1, 1},
+		Job<dtime_t>{2, Interval<dtime_t>(10, 10), Interval<dtime_t>(1, 1), 20, 1, 1},
+		Job<dtime_t>{3, Interval<dtime_t>(20, 20), Interval<dtime_t>(1, 1), 30, 1, 1},
+		Job<dtime_t>{4, Interval<dtime_t>(30, 30), Interval<dtime_t>(1, 1), 40, 1, 1},
+		Job<dtime_t>{5, Interval<dtime_t>(40, 40), Interval<dtime_t>(1, 1), 50, 1, 1},
+		Job<dtime_t>{6, Interval<dtime_t>(50, 50), Interval<dtime_t>(1, 1), 60, 1, 1},
 
 		// middle task
-		Job<dtime_t>{1, I( 0,  0), I(8, 8), 30, 2, 2},
-		Job<dtime_t>{2, I(30, 30), I(8, 8), 60, 2, 2},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(8, 8), 30, 2, 2},
+		Job<dtime_t>{2, Interval<dtime_t>(30, 30), Interval<dtime_t>(8, 8), 60, 2, 2},
 
 		// the long task
-		Job<dtime_t>{1, I( 0,  0), I(17, 17), 60, 3, 3}
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(17, 17), 60, 3, 3}
 	};
 
 	SUBCASE("RM, naive exploration") {
@@ -61,22 +61,22 @@ TEST_CASE("[IIP] P-RM negative example (Figure 2)")
 {
 	Uniproc::State_space<dtime_t>::Workload jobs{
 		// high-frequency task tau_1
-		Job<dtime_t>{1, I( 0,  0), I(3, 3), 10, 1, 1},
-		Job<dtime_t>{2, I(10, 10), I(3, 3), 20, 1, 1},
-		Job<dtime_t>{3, I(20, 20), I(3, 3), 30, 1, 1},
-		Job<dtime_t>{4, I(30, 30), I(3, 3), 40, 1, 1},
-		Job<dtime_t>{5, I(40, 40), I(3, 3), 50, 1, 1},
-		Job<dtime_t>{6, I(50, 50), I(3, 3), 60, 1, 1},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 3), 10, 1, 1},
+		Job<dtime_t>{2, Interval<dtime_t>(10, 10), Interval<dtime_t>(3, 3), 20, 1, 1},
+		Job<dtime_t>{3, Interval<dtime_t>(20, 20), Interval<dtime_t>(3, 3), 30, 1, 1},
+		Job<dtime_t>{4, Interval<dtime_t>(30, 30), Interval<dtime_t>(3, 3), 40, 1, 1},
+		Job<dtime_t>{5, Interval<dtime_t>(40, 40), Interval<dtime_t>(3, 3), 50, 1, 1},
+		Job<dtime_t>{6, Interval<dtime_t>(50, 50), Interval<dtime_t>(3, 3), 60, 1, 1},
 
 		// middle task
-		Job<dtime_t>{1, I( 0,  0), I(6, 6), 12, 2, 2},
-		Job<dtime_t>{2, I(12, 12), I(6, 6), 24, 2, 2},
-		Job<dtime_t>{3, I(24, 24), I(6, 6), 36, 2, 2},
-		Job<dtime_t>{4, I(36, 36), I(6, 6), 48, 2, 2},
-		Job<dtime_t>{5, I(48, 48), I(6, 6), 60, 2, 2},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(6, 6), 12, 2, 2},
+		Job<dtime_t>{2, Interval<dtime_t>(12, 12), Interval<dtime_t>(6, 6), 24, 2, 2},
+		Job<dtime_t>{3, Interval<dtime_t>(24, 24), Interval<dtime_t>(6, 6), 36, 2, 2},
+		Job<dtime_t>{4, Interval<dtime_t>(36, 36), Interval<dtime_t>(6, 6), 48, 2, 2},
+		Job<dtime_t>{5, Interval<dtime_t>(48, 48), Interval<dtime_t>(6, 6), 60, 2, 2},
 
 		// the long task
-		Job<dtime_t>{1, I( 0,  0), I(8, 8), 60, 3, 3}
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(8, 8), 60, 3, 3}
 	};
 
 	SUBCASE("RM, naive exploration") {
@@ -104,10 +104,10 @@ TEST_CASE("[IIP] P-RM negative example (Figure 2)")
 TEST_CASE("[IIP] P-RM example extra branch")
 {
     Uniproc::State_space<dtime_t>::Workload jobs{
-        Job<dtime_t>{0, I( 1,  1), I(1, 1), 3, 0, 0},
-        Job<dtime_t>{1, I(4, 4), I(1, 1), 6, 0, 0},
-        Job<dtime_t>{2, I( 0,  0), I(1, 2), 3, 1, 1},
-        Job<dtime_t>{3, I(2, 2), I(3, 3), 6, 2, 2},
+        Job<dtime_t>{0, Interval<dtime_t>( 1,  1), Interval<dtime_t>(1, 1), 3, 0, 0},
+        Job<dtime_t>{1, Interval<dtime_t>(4, 4), Interval<dtime_t>(1, 1), 6, 0, 0},
+        Job<dtime_t>{2, Interval<dtime_t>( 0,  0), Interval<dtime_t>(1, 2), 3, 1, 1},
+        Job<dtime_t>{3, Interval<dtime_t>(2, 2), Interval<dtime_t>(3, 3), 6, 2, 2},
         };
 
     SUBCASE("RM, naive exploration") {
@@ -147,22 +147,22 @@ TEST_CASE("[IIP] CW-EDF example (Figure 2)")
 {
 	Uniproc::State_space<dtime_t>::Workload jobs{
 		// high-frequency task tau_1
-		Job<dtime_t>{1, I( 0,  0), I(3, 3), 10, 10, 1},
-		Job<dtime_t>{2, I(10, 10), I(3, 3), 20, 20, 1},
-		Job<dtime_t>{3, I(20, 20), I(3, 3), 30, 30, 1},
-		Job<dtime_t>{4, I(30, 30), I(3, 3), 40, 40, 1},
-		Job<dtime_t>{5, I(40, 40), I(3, 3), 50, 50, 1},
-		Job<dtime_t>{6, I(50, 50), I(3, 3), 60, 60, 1},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 3), 10, 10, 1},
+		Job<dtime_t>{2, Interval<dtime_t>(10, 10), Interval<dtime_t>(3, 3), 20, 20, 1},
+		Job<dtime_t>{3, Interval<dtime_t>(20, 20), Interval<dtime_t>(3, 3), 30, 30, 1},
+		Job<dtime_t>{4, Interval<dtime_t>(30, 30), Interval<dtime_t>(3, 3), 40, 40, 1},
+		Job<dtime_t>{5, Interval<dtime_t>(40, 40), Interval<dtime_t>(3, 3), 50, 50, 1},
+		Job<dtime_t>{6, Interval<dtime_t>(50, 50), Interval<dtime_t>(3, 3), 60, 60, 1},
 
 		// middle task
-		Job<dtime_t>{1, I( 0,  0), I(6, 6), 12, 12, 2},
-		Job<dtime_t>{2, I(12, 12), I(6, 6), 24, 24, 2},
-		Job<dtime_t>{3, I(24, 24), I(6, 6), 36, 36, 2},
-		Job<dtime_t>{4, I(36, 36), I(6, 6), 48, 48, 2},
-		Job<dtime_t>{5, I(48, 48), I(6, 6), 60, 60, 2},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(6, 6), 12, 12, 2},
+		Job<dtime_t>{2, Interval<dtime_t>(12, 12), Interval<dtime_t>(6, 6), 24, 24, 2},
+		Job<dtime_t>{3, Interval<dtime_t>(24, 24), Interval<dtime_t>(6, 6), 36, 36, 2},
+		Job<dtime_t>{4, Interval<dtime_t>(36, 36), Interval<dtime_t>(6, 6), 48, 48, 2},
+		Job<dtime_t>{5, Interval<dtime_t>(48, 48), Interval<dtime_t>(6, 6), 60, 60, 2},
 
 		// the long task
-		Job<dtime_t>{1, I( 0,  0), I(8, 8), 60, 60, 3}
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(8, 8), 60, 60, 3}
 	};
 
 	SUBCASE("EDF, naive exploration") {
@@ -192,21 +192,21 @@ TEST_CASE("[IIP] CW-EDF extra example")
 {
 	Uniproc::State_space<dtime_t>::Workload jobs{
 		// high-frequency task tau_1
-		Job<dtime_t>{1, I( 0,  0), I(3, 3), 10, 10, 1},
-		Job<dtime_t>{2, I(10, 10), I(3, 3), 20, 20, 1},
-		Job<dtime_t>{3, I(20, 20), I(3, 3), 30, 30, 1},
-		Job<dtime_t>{4, I(30, 30), I(3, 3), 40, 40, 1},
-		Job<dtime_t>{5, I(40, 40), I(3, 3), 50, 50, 1},
-		Job<dtime_t>{6, I(50, 50), I(3, 3), 60, 60, 1},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 3), 10, 10, 1},
+		Job<dtime_t>{2, Interval<dtime_t>(10, 10), Interval<dtime_t>(3, 3), 20, 20, 1},
+		Job<dtime_t>{3, Interval<dtime_t>(20, 20), Interval<dtime_t>(3, 3), 30, 30, 1},
+		Job<dtime_t>{4, Interval<dtime_t>(30, 30), Interval<dtime_t>(3, 3), 40, 40, 1},
+		Job<dtime_t>{5, Interval<dtime_t>(40, 40), Interval<dtime_t>(3, 3), 50, 50, 1},
+		Job<dtime_t>{6, Interval<dtime_t>(50, 50), Interval<dtime_t>(3, 3), 60, 60, 1},
 
 		// middle task
-		Job<dtime_t>{1, I( 0,  0), I(8, 8), 15, 15, 2},
-		Job<dtime_t>{2, I(15, 15), I(8, 8), 30, 30, 2},
-		Job<dtime_t>{3, I(30, 30), I(8, 8), 45, 45, 2},
-		Job<dtime_t>{4, I(45, 45), I(8, 8), 60, 60, 2},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(8, 8), 15, 15, 2},
+		Job<dtime_t>{2, Interval<dtime_t>(15, 15), Interval<dtime_t>(8, 8), 30, 30, 2},
+		Job<dtime_t>{3, Interval<dtime_t>(30, 30), Interval<dtime_t>(8, 8), 45, 45, 2},
+		Job<dtime_t>{4, Interval<dtime_t>(45, 45), Interval<dtime_t>(8, 8), 60, 60, 2},
 
 		// the long task
-		Job<dtime_t>{1, I( 0,  0), I(8, 8), 60, 60, 3}
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(8, 8), 60, 60, 3}
 	};
 
 	SUBCASE("EDF, naive exploration") {
@@ -235,15 +235,15 @@ TEST_CASE("[IIP] P-RM idle time")
 {
 	Uniproc::State_space<dtime_t>::Workload jobs{
 		// high-frequency task
-		Job<dtime_t>{1, I( 0,  0), I(3, 3), 10, 1, 1},
-		Job<dtime_t>{2, I(10, 10), I(3, 3), 20, 1, 1},
-		Job<dtime_t>{3, I(20, 20), I(3, 3), 30, 1, 1},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 3), 10, 1, 1},
+		Job<dtime_t>{2, Interval<dtime_t>(10, 10), Interval<dtime_t>(3, 3), 20, 1, 1},
+		Job<dtime_t>{3, Interval<dtime_t>(20, 20), Interval<dtime_t>(3, 3), 30, 1, 1},
 
 		// blocking job
-		Job<dtime_t>{1, I( 8,  8), I(10, 10), 30, 2, 2},
+		Job<dtime_t>{1, Interval<dtime_t>( 8,  8), Interval<dtime_t>(10, 10), 30, 2, 2},
 
 		// low-priority job
-		Job<dtime_t>{1, I( 9,  9), I(1, 1), 30, 3, 3},
+		Job<dtime_t>{1, Interval<dtime_t>( 9,  9), Interval<dtime_t>(1, 1), 30, 3, 3},
 	};
 
 	SUBCASE("naive exploration") {

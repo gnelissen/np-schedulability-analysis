@@ -5,7 +5,8 @@
 #include <ostream>
 #include <memory>
 #include <vector>
-#include <ciso646>
+#include <limits>
+#include "time.hpp"
 
 template<class T> class Interval {
 	T a, b;
@@ -76,7 +77,12 @@ template<class T> class Interval {
 
 	bool disjoint(const Interval<T>& other) const
 	{
-		return other.until() < from() || until() < other.from();
+		//consecutive intervals are not considered to be disjoint
+		// eg. [2,3] and [4,5] is not considered disjoint, this can be merged to form [2,5]
+		bool disjoint;
+		disjoint = (other.until() + Time_model::constants<T>::epsilon()) < from() ||
+                               (until() + Time_model::constants<T>::epsilon()) < other.from();
+		return disjoint;
 	}
 
 	bool intersects(const Interval<T>& other) const

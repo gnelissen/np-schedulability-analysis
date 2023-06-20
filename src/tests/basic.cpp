@@ -15,29 +15,38 @@ static const auto inf = Time_model::constants<dtime_t>::infinity();
 TEST_CASE("Intervals") {
 	auto i1 = Interval<dtime_t>{10, 20};
 	auto i2 = Interval<dtime_t>{15, 25};
+	//to check if i1 and  i3 are not disjoint as they are consecutive intervals
 	auto i3 = Interval<dtime_t>{21, 30};
 	auto i4 = Interval<dtime_t>{5,  45};
+	//to check if i1 and i5 are disjoint as they are not consecutive nor are they joint
+	auto i5 = Interval<dtime_t>{22, 30};
 
 	Interval<dtime_t> ivals[]{i1, i2, i3, i4};
 
 	CHECK(i1.intersects(i2));
 	CHECK(i2.intersects(i3));
-	CHECK(i1.disjoint(i3));
+	//to check if i1 and  i3 are not disjoint as they are consecutive intervals
+	CHECK(i1.intersects(i3));
+	//to check if i1 and i5 are disjoint as they are not consecutive nor are they joint
+	CHECK(i1.disjoint(i5));
 
 	for (auto i : ivals)
 		CHECK(i.intersects(i4));
 
-	CHECK(i1.merge(i2).merge(i3) == I(10, 30));
+	CHECK(i1.merge(i2).merge(i3) == Interval<dtime_t>(10, 30));
 
-	CHECK(I(10, 20).intersects(I(10, 20)));
+	//to check if i1 and  i3 are not disjoint as they are consecutive intervals
+	CHECK(i1.merge(i3) == Interval<dtime_t>(10,30));	
+
+	CHECK(Interval<dtime_t>(10, 20).intersects(Interval<dtime_t>(10, 20)));
 }
 
 
 
 TEST_CASE("Job hashes work") {
-	Job<dtime_t> j1{9,  I(0, 0), I(3, 13), 60, 60};
-	Job<dtime_t> j2{9,  I(0, 0), I(3, 13), 60, 60};
-	Job<dtime_t> j3{10, I(0, 0), I(3, 13), 60, 60};
+	Job<dtime_t> j1{9,  Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60};
+	Job<dtime_t> j2{9,  Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60};
+	Job<dtime_t> j3{10, Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60};
 
 	auto h = std::hash<Job<dtime_t>>{};
 
@@ -48,9 +57,9 @@ TEST_CASE("Job hashes work") {
 
 TEST_CASE("Interval LUT") {
 
-	Interval_lookup_table<dtime_t, Job<dtime_t>, &Job<dtime_t>::scheduling_window> lut(I(0, 60), 10);
+	Interval_lookup_table<dtime_t, Job<dtime_t>, &Job<dtime_t>::scheduling_window> lut(Interval<dtime_t>(0, 60), 10);
 
-	Job<dtime_t> j1{10, I(0, 0), I(3, 13), 60, 60};
+	Job<dtime_t> j1{10, Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60};
 
 	lut.insert(j1);
 
@@ -73,7 +82,7 @@ TEST_CASE("state space") {
 
 	CHECK(h(s0) == 0);
 
-	Job<dtime_t> j1{10, I(0, 0), I(3, 13), 60, 60};
+	Job<dtime_t> j1{10, Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60};
 
 	CHECK(j1.least_cost() == 3);
 	CHECK(j1.maximal_cost() == 13);

@@ -4,23 +4,11 @@
 #include <utility>
 #include <limits>
 
-#include "interval.hpp"
-
 // discrete time
 using dtime_t = long long;
 
 // dense time
 using dense_t = double;
-
-inline Interval<dtime_t> I(const dtime_t &a, const dtime_t &b)
-{
-	return Interval<dtime_t>{a, b};
-}
-
-// inline Interval<dense_t> I(const dense_t &a, const dense_t &b)
-// {
-// 	return Interval<dense_t>{a, b};
-// }
 
 namespace Time_model {
 

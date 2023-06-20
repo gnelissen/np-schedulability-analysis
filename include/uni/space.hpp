@@ -798,7 +798,6 @@ namespace NP {
 					Interval<Time> next_range{std::min(ts_min, rel_min), t_l};
 
 					DM("ts_min = " << ts_min << std::endl <<
-					   "latest_idle = " << latest_idle << std::endl <<
 					   "latest_finish = " <<s.latest_finish_time() << std::endl);
 					DM("=> next range = " << next_range << std::endl);
 
@@ -901,7 +900,6 @@ namespace NP {
 
 					DM("ts_min = " << ts_min << std::endl <<
 					   "rel_min = " << rel_min << std::endl <<
-					   "latest_idle = " << latest_idle << std::endl <<
 					   "latest_finish = " << s.latest_finish_time() << std::endl);
 					DM("=> next range = " << next_range << std::endl);
 

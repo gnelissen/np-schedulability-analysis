@@ -8,6 +8,7 @@
 #include <exception>
 
 #include "time.hpp"
+#include "interval.hpp"
 
 namespace NP {
 
