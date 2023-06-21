@@ -32,10 +32,10 @@ TEST_CASE("[uni] basic aborts") {
 	auto aborts_in = std::istringstream(basic_aborts_file);
 
 	Scheduling_problem<dtime_t> prob{
-		parse_file<dtime_t>(jobs_in),
-		parse_dag_file(dag_in),
-		parse_abort_file<dtime_t>(aborts_in),
-		1
+			parse_csv_file<dtime_t>(jobs_in),
+			parse_dag_file(dag_in),
+			parse_abort_file<dtime_t>(aborts_in),
+			1
 	};
 
 	Analysis_options opts;
@@ -68,7 +68,7 @@ TEST_CASE("[uni] abort stops DL miss cascade") {
 	opts.early_exit = false;
 
 	SUBCASE("without aborts") {
-		Scheduling_problem<dtime_t> prob{parse_file<dtime_t>(jobs_in)};
+		Scheduling_problem<dtime_t> prob{parse_csv_file<dtime_t>(jobs_in)};
 
 		auto space = Uniproc::State_space<dtime_t>::explore(prob, opts);
 		CHECK_FALSE(space.is_schedulable());
@@ -85,10 +85,10 @@ TEST_CASE("[uni] abort stops DL miss cascade") {
 
 	SUBCASE("with aborts") {
 		Scheduling_problem<dtime_t> prob{
-			parse_file<dtime_t>(jobs_in),
-			parse_dag_file(dag_in),
-			parse_abort_file<dtime_t>(aborts_in),
-			1
+				parse_csv_file<dtime_t>(jobs_in),
+				parse_dag_file(dag_in),
+				parse_abort_file<dtime_t>(aborts_in),
+				1
 		};
 
 		auto space = Uniproc::State_space<dtime_t>::explore(prob, opts);

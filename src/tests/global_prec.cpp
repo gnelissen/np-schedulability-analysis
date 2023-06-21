@@ -67,7 +67,7 @@ TEST_CASE("[global-prec] taskset-1") {
 	auto dag = NP::parse_dag_file(dag_in);
 
 	auto in = std::istringstream(ts1_jobs);
-	auto jobs = NP::parse_file<dtime_t>(in);
+	auto jobs = NP::parse_csv_file<dtime_t>(in);
 
 	NP::Scheduling_problem<dtime_t> prob{jobs, dag};
 	NP::Analysis_options opts;
@@ -105,7 +105,7 @@ TEST_CASE("[global-prec] taskset-2") {
 	auto dag = NP::parse_dag_file(dag_in);
 
 	auto in = std::istringstream(ts2_jobs);
-	auto jobs = NP::parse_file<dtime_t>(in);
+	auto jobs = NP::parse_csv_file<dtime_t>(in);
 
 	NP::Scheduling_problem<dtime_t> prob{jobs, dag};
 	NP::Analysis_options opts;
@@ -150,7 +150,7 @@ TEST_CASE("[global-prec] taskset-3") {
 	auto dag = NP::parse_dag_file(dag_in);
 
 	auto in = std::istringstream(ts3_jobs);
-	auto jobs = NP::parse_file<dtime_t>(in);
+	auto jobs = NP::parse_csv_file<dtime_t>(in);
 
 	NP::Scheduling_problem<dtime_t> prob{jobs, dag};
 	NP::Analysis_options opts;
