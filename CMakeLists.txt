@@ -4,6 +4,7 @@ project(NP_schedulabiliy_test VERSION 2.1.0 LANGUAGES CXX)
 
 include_directories(include)
 include_directories(lib/include)
+add_subdirectory(lib/yaml-cpp/)
 
 option(PARALLEL_RUN "Enable parallel run" OFF)
 option(USE_TBB_MALLOC "Use the Intel TBB scalable memory allocator" ON)
@@ -46,7 +47,14 @@ elseif (USE_TBB_MALLOC)
     message(NOTICE "Using Intel TBB scalable memory allocator")
 endif ()
 
-set(CORE_LIBS ${TBB_LIB} ${ALLOC_LIB})
+set(CPACK_PROJECT_NAME ${PROJECT_NAME})
+set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "disable yaml tests")
+set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "disable yaml tools")
+set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "disable yaml contrib")
+set(YAML_LIB yaml-cpp)
+
+set(CORE_LIBS ${TBB_LIB} ${ALLOC_LIB} ${YAML_LIB})
 
 file(GLOB TEST_SOURCES "src/tests/*.cpp")
 add_executable(runtests ${TEST_SOURCES} ${SOURCES})
