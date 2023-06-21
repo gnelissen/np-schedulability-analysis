@@ -68,7 +68,8 @@ template<class Time, class Space>
 static Analysis_result analyze(
 	std::istream &in,
 	std::istream &dag_in,
-	std::istream &aborts_in)
+	std::istream &aborts_in,
+    bool &is_yaml)
 {
 #ifdef CONFIG_PARALLEL
 	tbb::task_scheduler_init init(
@@ -76,8 +77,10 @@ static Analysis_result analyze(
 #endif
 
 	// Parse input files and create NP scheduling problem description
+    typename NP::Job<Time>::Job_set jobs = is_yaml ? NP::parse_yaml_file<Time>(in) : NP::parse_csv_file<Time>(in);
+
 	NP::Scheduling_problem<Time> problem{
-		NP::parse_file<Time>(in),
+        jobs,
 		NP::parse_dag_file(dag_in),
 		NP::parse_abort_file<Time>(aborts_in),
 		num_processors};
@@ -134,24 +137,25 @@ static Analysis_result analyze(
 static Analysis_result process_stream(
 	std::istream &in,
 	std::istream &dag_in,
-	std::istream &aborts_in)
+	std::istream &aborts_in,
+    bool is_yaml)
 {
 	if (want_multiprocessor && want_dense)
-		return analyze<dense_t, NP::Global::State_space<dense_t>>(in, dag_in, aborts_in);
+		return analyze<dense_t, NP::Global::State_space<dense_t>>(in, dag_in, aborts_in, is_yaml);
 	else if (want_multiprocessor && !want_dense)
-		return analyze<dtime_t, NP::Global::State_space<dtime_t>>(in, dag_in, aborts_in);
+		return analyze<dtime_t, NP::Global::State_space<dtime_t>>(in, dag_in, aborts_in, is_yaml);
 	else if (want_dense && want_prm_iip)
-		return analyze<dense_t, NP::Uniproc::State_space<dense_t, NP::Uniproc::Precatious_RM_IIP<dense_t>>>(in, dag_in, aborts_in);
+		return analyze<dense_t, NP::Uniproc::State_space<dense_t, NP::Uniproc::Precatious_RM_IIP<dense_t>>>(in, dag_in, aborts_in, is_yaml);
 	else if (want_dense && want_cw_iip)
-		return analyze<dense_t, NP::Uniproc::State_space<dense_t, NP::Uniproc::Critical_window_IIP<dense_t>>>(in, dag_in, aborts_in);
+		return analyze<dense_t, NP::Uniproc::State_space<dense_t, NP::Uniproc::Critical_window_IIP<dense_t>>>(in, dag_in, aborts_in, is_yaml);
 	else if (want_dense && !want_prm_iip)
-		return analyze<dense_t, NP::Uniproc::State_space<dense_t>>(in, dag_in, aborts_in);
+		return analyze<dense_t, NP::Uniproc::State_space<dense_t>>(in, dag_in, aborts_in, is_yaml);
 	else if (!want_dense && want_prm_iip)
-		return analyze<dtime_t, NP::Uniproc::State_space<dtime_t, NP::Uniproc::Precatious_RM_IIP<dtime_t>>>(in, dag_in, aborts_in);
+		return analyze<dtime_t, NP::Uniproc::State_space<dtime_t, NP::Uniproc::Precatious_RM_IIP<dtime_t>>>(in, dag_in, aborts_in, is_yaml);
 	else if (!want_dense && want_cw_iip)
-		return analyze<dtime_t, NP::Uniproc::State_space<dtime_t, NP::Uniproc::Critical_window_IIP<dtime_t>>>(in, dag_in, aborts_in);
+		return analyze<dtime_t, NP::Uniproc::State_space<dtime_t, NP::Uniproc::Critical_window_IIP<dtime_t>>>(in, dag_in, aborts_in, is_yaml);
 	else
-		return analyze<dtime_t, NP::Uniproc::State_space<dtime_t>>(in, dag_in, aborts_in);
+		return analyze<dtime_t, NP::Uniproc::State_space<dtime_t>>(in, dag_in, aborts_in, is_yaml);
 }
 
 static void process_file(const std::string& fname)
@@ -179,10 +183,17 @@ static void process_file(const std::string& fname)
 			static_cast<std::istream&>(empty_aborts_stream);
 
 		if (fname == "-")
-			result = process_stream(std::cin, dag_in, aborts_in);
+			result = process_stream(std::cin, dag_in, aborts_in, false);
 		else {
+            // check the extension of the file
+            std::string ext = fname.substr(fname.find_last_of(".") + 1);
+            bool is_yaml = false;
+            if (ext == "yaml" || ext == "yml") {
+                is_yaml = true;
+            }
+
 			auto in = std::ifstream(fname, std::ios::in);
-			result = process_stream(in, dag_in, aborts_in);
+			result = process_stream(in, dag_in, aborts_in,is_yaml);
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 			if (want_dot_graph) {
 				std::string dot_name = fname;

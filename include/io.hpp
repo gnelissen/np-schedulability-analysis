@@ -9,6 +9,7 @@
 #include "jobs.hpp"
 #include "precedence.hpp"
 #include "aborts.hpp"
+#include "yaml-cpp/yaml.h"
 
 namespace NP {
 
@@ -130,7 +131,7 @@ namespace NP {
 	}
 
 	template<class Time>
-	typename Job<Time>::Job_set parse_file(std::istream& in)
+	typename Job<Time>::Job_set parse_csv_file(std::istream& in)
 	{
 		// first row contains a comment, just skip it
 		next_line(in);
@@ -142,6 +143,33 @@ namespace NP {
 			// munge any trailing whitespace or extra columns
 			next_line(in);
 		}
+
+		return jobs;
+	}
+
+	template<class Time>
+	typename Job<Time>::Job_set parse_yaml_file(std::istream& in)
+	{
+		typename Job<Time>::Job_set jobs;
+        unsigned long tid, jid;
+        Time arr_min, arr_max, cost_min, cost_max, dl, prio;
+        YAML::Node input_job_set = YAML::Load(in);
+
+		auto const js = input_job_set["jobset"];
+		for (auto const &j: js) {
+			tid = j["Task ID"].as<unsigned long>();
+			jid = j["Job ID"].as<unsigned long>();
+			arr_min = j["Arrival min"].as<Time>();
+			arr_max = j["Arrival max"].as<Time>();
+			cost_min = j["Cost min"].as<Time>();
+			cost_max = j["Cost max"].as<Time>();
+			dl = j["Deadline"].as<Time>();
+			prio = j["Priority"].as<Time>();
+
+			jobs.push_back(Job<Time>{jid, Interval<Time>{arr_min, arr_max},
+									 Interval<Time>{cost_min, cost_max}, dl, prio, tid});
+		}
+
 
 		return jobs;
 	}
