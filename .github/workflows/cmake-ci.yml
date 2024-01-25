@@ -93,7 +93,7 @@ jobs:
     - name: Run an example (Windows)
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       if: ${{ matrix.os == 'windows-latest'}}
-      run: nptest.exe ../examples/fig1c.csv -m 4 --header 
+      run: .\\Release\\nptest.exe ..\\examples\\fig1c.csv -m 4 --header 
       shell: bash
 
     - name: Test (Windows)
@@ -101,5 +101,5 @@ jobs:
       if: ${{ matrix.os == 'windows-latest'}}
       # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: runtests.exe
+      run: .\\Release\\runtests.exe
       shell: bash
