@@ -14,6 +14,30 @@ An [earlier version of this tool](https://github.com/brandenburg/np-schedulabili
 
 The uniprocessor analysis (Nasri & Brandenburg, 2017) is exact (in the absence of precedence constraints); the multiprocessor analyses (Nasri et al., 2018, 2019) are not. 
 
+## Table of Contents
+
+- [NP Schedulability Test](#np-schedulability-test)
+  - [Table of Contents](#table-of-contents)
+  - [Dependencies](#dependencies)
+  - [Build Instructions](#build-instructions)
+  - [Build Options](#build-options)
+  - [Unit Tests](#unit-tests)
+  - [Input Format](#input-format)
+    - [Job Sets](#job-sets)
+    - [Precedence Constraints](#precedence-constraints)
+    - [Abort Actions](#abort-actions)
+  - [Analyzing a Job Set](#analyzing-a-job-set)
+    - [Global Multiprocessor Analysis](#global-multiprocessor-analysis)
+    - [Precedence Constraints](#precedence-constraints-1)
+    - [Aborting Jobs Past a Certain Point](#aborting-jobs-past-a-certain-point)
+  - [Output Format](#output-format)
+  - [Obtaining Response Times](#obtaining-response-times)
+  - [Gang](#gang)
+  - [Questions, Patches, or Suggestions](#questions-patches-or-suggestions)
+  - [License](#license)
+  - [Credits](#credits)
+
+
 ## Dependencies
 
 - A modern C++ compiler supporting the **C++14 standard**. Recent versions of `clang` and `g++` on Linux and macOS are known to work. 
@@ -232,6 +256,10 @@ If invoked on an input file named `foo.csv`, the completion times will be stored
 6. WCRT, the worst-case response time (relative to the minimum release time)
 
 Note that the analysis by default aborts after finding the first deadline miss, in which case some of the rows may report nonsensical default values.  To force the analysis to run to completion despite deadline misses, pass the `-c` flag to `nptest`.
+
+## Gang
+
+The code for the analysis of *gang* tasks (i.e., tasks with multiple cores that must be scheduled together) is available in the [`gang`](https://github.com/gnelissen/np-schedulability-analysis/tree/gang) branch.
 
 ## Questions, Patches, or Suggestions
 
