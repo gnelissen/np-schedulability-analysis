@@ -829,7 +829,7 @@ namespace NP {
 
 #ifdef CONFIG_PARALLEL
 
-					oneapi::tbb::parallel_for(new_states_part.range(),
+					parallel_for(new_states_part.range(),
 						[&] (typename Split_states::const_range_type& r) {
 							for (auto it = r.begin(); it != r.end(); it++) {
 								const States& new_states = *it;
