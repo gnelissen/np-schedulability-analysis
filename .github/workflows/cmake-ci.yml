@@ -26,11 +26,13 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         build_type: [Release]
         c_compiler: [gcc, clang, cl]
+        cmake_option: [ -DPARALLEL_RUN=OFF, -DPARALLEL_RUN=ON]
         include:
           - os: windows-latest
             c_compiler: cl
             cpp_compiler: cl
             cmake_option: -DUSE_TBB_MALLOC=OFF -DMSVC=ON
+            build_type: Release
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
@@ -42,64 +44,68 @@ jobs:
             c_compiler: gcc
           - os: windows-latest
             c_compiler: clang
+          - os: windows-latest
+            cmake_option: -DPARALLEL_RUN=ON
+          - os: windows-latest
+            cmake_option: -DPARALLEL_RUN=OFF
           - os: ubuntu-latest
             c_compiler: cl
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Set reusable strings
-      # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
-      id: strings
-      shell: bash
-      run: |
-        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+      - name: Set reusable strings
+        # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    - name: install Intel TBB
-      if: ${{ matrix.os == 'ubuntu-latest'}}
-      run: |
-            sudo apt-get -y update
-            sudo apt-get -y install libtbb-dev
+      - name: install Intel TBB
+        if: ${{ matrix.os == 'ubuntu-latest'}}
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install libtbb-dev
 
-    - name: Configure CMake
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: >
-        cmake -B ${{ steps.strings.outputs.build-output-dir }}
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        ${{ matrix.cmake_option }}
-        -S ${{ github.workspace }}
+      - name: Configure CMake
+        # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+        # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+        run: >
+          cmake -B ${{ steps.strings.outputs.build-output-dir }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          ${{ matrix.cmake_option }}
+          -S ${{ github.workspace }}
 
-    - name: Build
-      # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+      - name: Build
+        # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
+        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-    - name: Run an example (POSIX)
-      working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      if: ${{ matrix.os == 'ubuntu-latest'}}
-      run: ./nptest ../examples/fig1c.csv -m 4 --header 
-      shell: bash
+      - name: Run an example (POSIX)
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        if: ${{ matrix.os == 'ubuntu-latest'}}
+        run: ./nptest ../examples/fig1c.csv -m 4 --header
+        shell: bash
 
-    - name: Test (POSIX)
-      working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      if: ${{ matrix.os == 'ubuntu-latest'}}
-      # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ./runtests
-      shell: bash
+      - name: Test (POSIX)
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        if: ${{ matrix.os == 'ubuntu-latest'}}
+        # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
+        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        run: ./runtests
+        shell: bash
 
-    - name: Run an example (Windows)
-      working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      if: ${{ matrix.os == 'windows-latest'}}
-      run: .\\Release\\nptest.exe ..\\examples\\fig1c.csv -m 4 --header 
-      shell: bash
+      - name: Run an example (Windows)
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        if: ${{ matrix.os == 'windows-latest'}}
+        run: .\\Release\\nptest.exe ..\\examples\\fig1c.csv -m 4 --header
+        shell: bash
 
-    - name: Test (Windows)
-      working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      if: ${{ matrix.os == 'windows-latest'}}
-      # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: .\\Release\\runtests.exe
-      shell: bash
+      - name: Test (Windows)
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        if: ${{ matrix.os == 'windows-latest'}}
+        # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
+        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        run: .\\Release\\runtests.exe
+        shell: bash
