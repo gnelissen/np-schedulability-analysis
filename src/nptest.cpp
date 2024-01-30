@@ -13,7 +13,9 @@
 
 #ifdef CONFIG_PARALLEL
 
-#include "tbb/task_scheduler_init.h"
+#include <oneapi/tbb/info.h>
+#include <oneapi/tbb/parallel_for.h>
+#include <oneapi/tbb/task_arena.h>
 
 #endif
 
@@ -71,8 +73,7 @@ static Analysis_result analyze(
 	std::istream &aborts_in)
 {
 #ifdef CONFIG_PARALLEL
-	tbb::task_scheduler_init init(
-		num_worker_threads ? num_worker_threads : tbb::task_scheduler_init::automatic);
+	oneapi::tbb::task_arena arena(num_worker_threads ? num_worker_threads : oneapi::tbb::info::default_concurrency());
 #endif
 
 	// Parse input files and create NP scheduling problem description
