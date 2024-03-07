@@ -60,6 +60,10 @@ jobs:
       shell: bash
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+        
+    - name: Pull submodules recursively
+      run: |
+            git submodule update --init --recursive
 
     - name: install Intel TBB
       if: ${{ matrix.os == 'ubuntu-latest'}}
