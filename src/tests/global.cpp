@@ -65,7 +65,7 @@ TEST_CASE("[global-prec] basic state evolution (RTSS18-Fig-3)") {
 
 TEST_CASE("[global] RTSS17-Fig-1a") {
 	auto in = std::istringstream(fig1a_jobs_file);
-	auto jobs = NP::parse_csv_file<dtime_t>(in);
+	auto jobs = NP::parse_csv_job_file<dtime_t>(in);
 
 	auto num_cpus = 2;
 
@@ -101,7 +101,7 @@ const std::string global_fig1_file =
 
 TEST_CASE("[global] ECRTS18-Fig-1") {
 	auto in = std::istringstream(global_fig1_file);
-	auto jobs = NP::parse_csv_file<dtime_t>(in);
+	auto jobs = NP::parse_csv_job_file<dtime_t>(in);
 
 	auto num_cpus = 2;
 

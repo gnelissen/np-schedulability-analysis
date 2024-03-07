@@ -35,7 +35,7 @@ TEST_CASE("[dense time] job parser exception") {
 TEST_CASE("[dense time] file parser") {
 	auto in = std::istringstream(four_lines);
 
-	auto jobs = NP::parse_csv_file<dense_t>(in);
+	auto jobs = NP::parse_csv_job_file<dense_t>(in);
 
 	CHECK(jobs.size() == 3);
 
@@ -133,7 +133,7 @@ TEST_CASE("[parser] invalid precedence reference") {
 	auto dag = NP::parse_dag_file(dag_in);
 
 	auto in = std::istringstream(four_lines);
-	auto jobs = NP::parse_csv_file<dense_t>(in);
+	auto jobs = NP::parse_csv_job_file<dense_t>(in);
 
 	REQUIRE_THROWS_AS(NP::validate_prec_refs<dense_t>(dag, jobs), NP::InvalidJobReference);
 }
@@ -148,7 +148,7 @@ TEST_CASE("[parser] valid precedence reference") {
 	auto dag = NP::parse_dag_file(dag_in);
 
 	auto in = std::istringstream(four_lines);
-	auto jobs = NP::parse_csv_file<dense_t>(in);
+	auto jobs = NP::parse_csv_job_file<dense_t>(in);
 
 	NP::validate_prec_refs<dense_t>(dag, jobs);
 	// dummy check; real check is that previous line didn't throw an exception
