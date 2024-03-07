@@ -4,8 +4,8 @@ project(NP_schedulabiliy_test VERSION 2.2.0 LANGUAGES CXX)
 
 include_directories(include)
 include_directories(lib/include)
-# Add yaml-cpp library
-find_package(yaml-cpp REQUIRED)
+set(YAML_CPP_INCLUDE_DIR "lib/yaml-cpp/")
+include_directories(${YAML_CPP_INCLUDE_DIR})
 
 option(PARALLEL_RUN "Enable parallel run" OFF)
 option(USE_TBB_MALLOC "Use the Intel TBB scalable memory allocator" ON)
@@ -48,12 +48,6 @@ elseif (USE_TBB_MALLOC)
     message(NOTICE "Using Intel TBB scalable memory allocator")
 endif ()
 
-# If yaml-cpp is not found automatically, you can specify its path manually
-if(NOT yaml-cpp_FOUND)
-    set(YAML_CPP_INCLUDE_DIR "lib/yaml-cpp/include/")
-    set(YAML_CPP_LIBRARIES "lib/yaml-cpp/lib/libyaml-cpp.a")
-    include_directories(${YAML_CPP_INCLUDE_DIR})
-endif()
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
