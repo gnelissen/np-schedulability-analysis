@@ -1,0 +1,41 @@
+jobset:
+  - Task ID: 1
+    Job ID: 1
+    Arrival min: 0
+    Arrival max: 0
+    Cost min: 2
+    Cost max: 4
+    Deadline: 7
+    Priority: 1
+  - Task ID: 2
+    Job ID: 1
+    Arrival min: 0
+    Arrival max: 0
+    Cost min: 10
+    Cost max: 15
+    Deadline: 20
+    Priority: 2
+  - Task ID: 3
+    Job ID: 1
+    Arrival min: 5
+    Arrival max: 5
+    Cost min: 1
+    Cost max: 7
+    Deadline: 15
+    Priority: 3
+  - Task ID: 4
+    Job ID: 1
+    Arrival min: 8
+    Arrival max: 8
+    Cost min: 2
+    Cost max: 3
+    Deadline: 20
+    Priority: 4
+  - Task ID: 5
+    Job ID: 1
+    Arrival min: 8
+    Arrival max: 8
+    Cost min: 1
+    Cost max: 1
+    Deadline: 14
+    Priority: 5
