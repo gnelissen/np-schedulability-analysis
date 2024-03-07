@@ -35,8 +35,6 @@ if (COLLECT_SCHEDULE_GRAPHS)
     endif()
 elseif (PARALLEL_RUN)
     set(TBB_LIB TBB::tbb)
-    find_path(TBB_INCLUDE_DIR NAMES tbb/task_scheduler_init.h)
-    include_directories(${TBB_INCLUDE_DIR})
     add_compile_definitions(CONFIG_PARALLEL)
 endif ()
 
@@ -47,12 +45,7 @@ elseif (USE_TBB_MALLOC)
     set(ALLOC_LIB TBB::tbbmalloc_proxy)
     message(NOTICE "Using Intel TBB scalable memory allocator")
 endif ()
-
-set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "disable yaml tests")
-set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "disable yaml tools")
-set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "disable yaml contrib")
 set(YAML_LIB yaml-cpp)
-
 set(CORE_LIBS ${TBB_LIB} ${ALLOC_LIB} ${YAML_LIB})
 
 file(GLOB TEST_SOURCES "src/tests/*.cpp")
