@@ -48,6 +48,13 @@ elseif (USE_TBB_MALLOC)
     message(NOTICE "Using Intel TBB scalable memory allocator")
 endif ()
 
+# If yaml-cpp is not found automatically, you can specify its path manually
+if(NOT yaml-cpp_FOUND)
+    set(YAML_CPP_INCLUDE_DIR "lib/yaml-cpp/include/")
+    set(YAML_CPP_LIBRARIES "lib/yaml-cpp/lib/libyaml-cpp.a")
+    include_directories(${YAML_CPP_INCLUDE_DIR})
+endif()
+
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "disable yaml tests")
