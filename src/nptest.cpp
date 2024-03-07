@@ -13,7 +13,9 @@
 
 #ifdef CONFIG_PARALLEL
 
-#include "tbb/task_scheduler_init.h"
+#include <oneapi/tbb/info.h>
+#include <oneapi/tbb/parallel_for.h>
+#include <oneapi/tbb/task_arena.h>
 
 #endif
 
@@ -58,7 +60,7 @@ static unsigned int num_worker_threads = 0;
 struct Analysis_result {
 	bool schedulable;
 	bool timeout;
-	unsigned long number_of_states, number_of_edges, max_width, number_of_jobs;
+	unsigned long long number_of_states, number_of_edges, max_width, number_of_jobs;
 	double cpu_time;
 	std::string graph;
 	std::string response_times_csv;
@@ -72,8 +74,7 @@ static Analysis_result analyze(
     bool &is_yaml)
 {
 #ifdef CONFIG_PARALLEL
-	tbb::task_scheduler_init init(
-		num_worker_threads ? num_worker_threads : tbb::task_scheduler_init::automatic);
+	oneapi::tbb::task_arena arena(num_worker_threads ? num_worker_threads : oneapi::tbb::info::default_concurrency());
 #endif
 
 	// Parse input files and create NP scheduling problem description

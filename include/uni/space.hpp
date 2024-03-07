@@ -172,7 +172,7 @@ namespace NP {
 			typedef Job_set Scheduled;
 
 			typedef std::deque<State> States;
-			typedef typename std::deque<State>::iterator State_ref;
+			typedef State* State_ref;
 			typedef std::unordered_multimap<hash_value_t, State_ref> States_map;
 
 			typedef const Job<Time>* Job_ref;
@@ -551,7 +551,7 @@ namespace NP {
 			State& new_state(Args&&... args)
 			{
 				states.emplace_back(std::forward<Args>(args)...);
-				State_ref s_ref = --states.end();
+				State_ref s_ref = &(*(--states.end()));
 
 				auto njobs = s_ref->get_scheduled_jobs().size();
 				assert (
@@ -610,7 +610,7 @@ namespace NP {
 
 			void done_with_current_state()
 			{
-				State_ref s = todo[todo_idx].front();
+				State_ref s = &(*(todo[todo_idx].front()));
 				// remove from TODO list
 				todo[todo_idx].pop_front();
 
@@ -631,7 +631,7 @@ namespace NP {
 				assert(deleted);
 
 				// delete from master sequence to free up memory
-				assert(states.begin() == s);
+				assert(&(*(states.begin())) == s);
 				states.pop_front();
 #endif
 			}

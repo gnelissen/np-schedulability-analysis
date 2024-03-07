@@ -68,4 +68,7 @@ target_link_libraries(runtests ${CORE_LIBS})
 target_compile_features(runtests PUBLIC cxx_std_14)
 target_compile_features(nptest PUBLIC cxx_std_14)
 
-
+if (MSVC)
+    target_compile_options(runtests PUBLIC "/Zc:__cplusplus")
+    target_compile_options(nptest PUBLIC "/Zc:__cplusplus")
+endif()

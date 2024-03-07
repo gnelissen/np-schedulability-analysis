@@ -181,7 +181,7 @@ namespace NP {
 #endif
 			private:
 
-			typedef typename std::deque<State>::iterator State_ref;
+			typedef State* State_ref;
 			typedef typename std::forward_list<State_ref> State_refs;
 
 #ifdef CONFIG_PARALLEL
@@ -406,7 +406,7 @@ namespace NP {
 			State_ref alloc_state(Args&&... args)
 			{
 				states().emplace_back(std::forward<Args>(args)...);
-				State_ref s = --states().end();
+				State_ref s = &(*(--states().end()));
 
 				// make sure we didn't screw up...
 				auto njobs = s->number_of_scheduled_jobs();
@@ -421,7 +421,7 @@ namespace NP {
 
 			void dealloc_state(State_ref s)
 			{
-				assert(--states().end() == s);
+				assert(&(*(--states().end())) == s);
 				states().pop_back();
 			}
 
