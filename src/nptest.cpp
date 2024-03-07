@@ -78,11 +78,13 @@ static Analysis_result analyze(
 #endif
 
 	// Parse input files and create NP scheduling problem description
-    typename NP::Job<Time>::Job_set jobs = is_yaml ? NP::parse_yaml_file<Time>(in) : NP::parse_csv_file<Time>(in);
+    typename NP::Job<Time>::Job_set jobs = is_yaml ? NP::parse_yaml_job_file<Time>(in) : NP::parse_csv_job_file<Time>(in);
+	// Parse precedence constraints
+	typename NP::Precedence_constraints edges = is_yaml ? NP::parse_yaml_dag_file(dag_in) : NP::parse_dag_file(dag_in);
 
 	NP::Scheduling_problem<Time> problem{
         jobs,
-		NP::parse_dag_file(dag_in),
+		edges,
 		NP::parse_abort_file<Time>(aborts_in),
 		num_processors};
 
@@ -194,7 +196,7 @@ static void process_file(const std::string& fname)
             }
 
 			auto in = std::ifstream(fname, std::ios::in);
-			result = process_stream(in, dag_in, aborts_in,is_yaml);
+			result = process_stream(in, dag_in, aborts_in, is_yaml);
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 			if (want_dot_graph) {
 				std::string dot_name = fname;
