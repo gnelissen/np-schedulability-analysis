@@ -1,0 +1,79 @@
+jobset:
+  - Task ID: 1
+    Job ID: 1
+    Arrival min: 0
+    Arrival max: 0
+    Cost min: 1
+    Cost max: 2
+    Deadline: 10
+    Priority: 10
+    Successors: [[1,2]]
+  - Task ID: 1
+    Job ID: 2
+    Arrival min: 10
+    Arrival max: 10
+    Cost min: 1
+    Cost max: 2
+    Deadline: 20
+    Priority: 20
+    Successors: [[1,3], [3,9]]
+  - Task ID: 1
+    Job ID: 3
+    Arrival min: 20
+    Arrival max: 20
+    Cost min: 1
+    Cost max: 2
+    Deadline: 30
+    Priority: 30
+    Successors: [[1,4]]
+  - Task ID: 1
+    Job ID: 4
+    Arrival min: 30
+    Arrival max: 30
+    Cost min: 1
+    Cost max: 2
+    Deadline: 40
+    Priority: 40
+    Successors: [[1,5]]
+  - Task ID: 1
+    Job ID: 5
+    Arrival min: 40
+    Arrival max: 40
+    Cost min: 1
+    Cost max: 2
+    Deadline: 50
+    Priority: 50
+    Successors: [[1,6]]
+  - Task ID: 1
+    Job ID: 6
+    Arrival min: 50
+    Arrival max: 50
+    Cost min: 1
+    Cost max: 2
+    Deadline: 60
+    Priority: 60
+  - Task ID: 2
+    Job ID: 7
+    Arrival min: 0
+    Arrival max: 0
+    Cost min: 7
+    Cost max: 8
+    Deadline: 30
+    Priority: 30
+    Successors: [[2,8]]
+  - Task ID: 2
+    Job ID: 8
+    Arrival min: 30
+    Arrival max: 30
+    Cost min: 7
+    Cost max: 7
+    Deadline: 60
+    Priority: 60
+  - Task ID: 2
+    Job ID: 9
+    Arrival min: 0
+    Arrival max: 0
+    Cost min: 3
+    Cost max: 13
+    Deadline: 60
+    Priority: 60
