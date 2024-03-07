@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.8.0)
 
-project(NP_schedulabiliy_test VERSION 2.1.0 LANGUAGES CXX)
+project(NP_schedulabiliy_test VERSION 2.2.0 LANGUAGES CXX)
 
 include_directories(include)
 include_directories(lib/include)
-add_subdirectory(lib/yaml-cpp/)
+# Add yaml-cpp library
+find_package(yaml-cpp REQUIRED)
 
 option(PARALLEL_RUN "Enable parallel run" OFF)
 option(USE_TBB_MALLOC "Use the Intel TBB scalable memory allocator" ON)
