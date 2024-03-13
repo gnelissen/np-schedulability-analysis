@@ -101,19 +101,39 @@ namespace NP {
 	inline Precedence_constraints parse_yaml_dag_file(std::istream& in)
 	{
 		Precedence_constraints edges;
+		// Clear any flags
+		in.clear();
+		// Move the pointer to the beginning
+		in.seekg(0, std::ios::beg);
 		try {
-			YAML::Node config = YAML::Load(in);
+			// read the YAML file
+			YAML::Node input_job_set = YAML::Load(in);
+			auto const js = input_job_set["jobset"];
 			// Iterate over each jobset entry
-			for (const auto& jobset : config["jobset"]) {
+			for (auto const &j : js) {
 				// Check if a job has a successor
-				if (jobset["Successors"]) {
-					auto from = JobID(jobset["Job ID"].as<unsigned long>(), jobset["Task ID"].as<unsigned long>());
+				if (j["Successors"]) {
+					std::cout << "Job ID: " << j["Job ID"].as<unsigned long>() << std::endl;
+					auto from = JobID(j["Job ID"].as<unsigned long>(), j["Task ID"].as<unsigned long>());
 					// Iterate over each successor
-					for (const auto &succ: jobset["Successors"]) {
-						auto tid = succ[0].as<unsigned long>();
-						auto jid = succ[1].as<unsigned long>();
-						auto to = JobID(jid, tid);
-						edges.push_back(Precedence_constraint(from, to));
+					for (const auto &succ: j["Successors"]) {
+						// first, we need to check to see if it is written
+						// in the compact form [TaskID, JobID]
+						// or the expanded form
+						// - Task ID: Int
+						// 	 Job ID: Int
+						if (succ.IsSequence()) {
+							std::cout << "Task ID: " << succ[0].as<unsigned long>() << std::endl;
+							auto tid = succ[0].as<unsigned long>();
+							auto jid = succ[1].as<unsigned long>();
+							auto to = JobID(jid, tid);
+							edges.push_back(Precedence_constraint(from, to));
+						} else {
+							auto tid = succ["Task ID"].as<unsigned long>();
+							auto jid = succ["Job ID"].as<unsigned long>();
+							auto to = JobID(jid, tid);
+							edges.push_back(Precedence_constraint(from, to));
+						}
 					}
 				}
 			}
