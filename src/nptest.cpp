@@ -80,7 +80,7 @@ static Analysis_result analyze(
 	// Parse input files and create NP scheduling problem description
     typename NP::Job<Time>::Job_set jobs = is_yaml ? NP::parse_yaml_job_file<Time>(in) : NP::parse_csv_job_file<Time>(in);
 	// Parse precedence constraints
-	typename NP::Precedence_constraints edges = is_yaml ? NP::parse_yaml_dag_file(dag_in) : NP::parse_dag_file(dag_in);
+	typename NP::Precedence_constraints edges = is_yaml ? NP::parse_yaml_dag_file(in) : NP::parse_dag_file(dag_in);
 
 	NP::Scheduling_problem<Time> problem{
         jobs,
