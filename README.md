@@ -22,22 +22,30 @@ The uniprocessor analysis (Nasri & Brandenburg, 2017) is exact (in the absence o
 
 - A POSIX OS. Linux and macOS are both known to work.
 
-- The [Intel Thread Building Blocks (TBB)](https://www.threadingbuildingblocks.org) library and parallel runtime. 
+- The [Intel oneAPI Threading Building Blocks (oneTBB)](https://www.threadingbuildingblocks.org) library and parallel runtime. 
 
 - The [jemalloc](http://jemalloc.net) scalable memory allocator. Alternatively, the TBB allocator can be used instead; see build options below.
+
+- The [yaml-cpp](https://github.com/jbeder/yaml-cpp) library.
 
 ## Build Instructions
 
 These instructions assume a Linux or macOS host.
 
-To compile the tool, first generate an appropriate `Makefile` with `cmake` and then use it to actually build the source tree.
+If `yaml-cpp` is not installed on your system, you should pull its submodule by running the following:
+```bash
+git submodule update --init --recursive
+```
 
+To compile the tool, first generate an appropriate `Makefile` with `cmake` and then use it to actually build the source tree.
+```bash
 	# (1) enter the build directory
 	cd build
 	# (2) generate the Makefile
 	cmake ..
 	# (3) build everything
 	make -j
+```
 
 The last step yields two binaries:
 
