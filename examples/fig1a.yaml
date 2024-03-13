@@ -16,7 +16,11 @@ jobset:
     Cost max: 2
     Deadline: 20
     Priority: 20
-    Successors: [[1,3], [3,9]]
+    Successors:
+      - Task ID: 1
+        Job ID: 3
+      - Task ID: 3
+        Job ID: 9
   - Task ID: 1
     Job ID: 3
     Arrival min: 20
@@ -69,7 +73,7 @@ jobset:
     Cost max: 7
     Deadline: 60
     Priority: 60
-  - Task ID: 2
+  - Task ID: 3
     Job ID: 9
     Arrival min: 0
     Arrival max: 0
