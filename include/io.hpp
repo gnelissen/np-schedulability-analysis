@@ -113,7 +113,6 @@ namespace NP {
 			for (auto const &j : js) {
 				// Check if a job has a successor
 				if (j["Successors"]) {
-					std::cout << "Job ID: " << j["Job ID"].as<unsigned long>() << std::endl;
 					auto from = JobID(j["Job ID"].as<unsigned long>(), j["Task ID"].as<unsigned long>());
 					// Iterate over each successor
 					for (const auto &succ: j["Successors"]) {
@@ -123,7 +122,6 @@ namespace NP {
 						// - Task ID: Int
 						// 	 Job ID: Int
 						if (succ.IsSequence()) {
-							std::cout << "Task ID: " << succ[0].as<unsigned long>() << std::endl;
 							auto tid = succ[0].as<unsigned long>();
 							auto jid = succ[1].as<unsigned long>();
 							auto to = JobID(jid, tid);
