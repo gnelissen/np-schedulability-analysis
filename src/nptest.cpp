@@ -200,7 +200,7 @@ static void process_file(const std::string& fname)
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 			if (want_dot_graph) {
 				std::string dot_name = fname;
-				auto p = is_yaml ? rta_name.find(".yaml") : rta_name.find(".csv");
+				auto p = is_yaml ? dot_name.find(".yaml") : dot_name.find(".csv");
 				if (p != std::string::npos) {
 					dot_name.replace(p, std::string::npos, ".dot");
 					auto out  = std::ofstream(dot_name,  std::ios::out);
