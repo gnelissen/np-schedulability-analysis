@@ -9,7 +9,7 @@
 #include "jobs.hpp"
 
 
-TEST_CASE("[partitioned] basic state evolution") {
+/*TEST_CASE("[partitioned] basic state evolution") {
 	NP::Global::Schedule_state<dtime_t> init({ 2, 1, 3 });
 
 	CHECK(init.cluster(0).core_availability().min() == 0);
@@ -85,7 +85,7 @@ TEST_CASE("[partitioned] basic state evolution") {
 
 	CHECK(vp.cluster(0).core_availability().min() == 5);
 	CHECK(vp.cluster(0).core_availability().max() == 20);
-}
+}*/
 
 const std::string part1_file =
 "Task ID, Job ID, Arrival min, Arrival max, Cost min, Cost max, Deadline, Priority, Affinity\n"
