@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.8.0)
 
-project(NP_schedulabiliy_test VERSION 3.0.0 LANGUAGES CXX)
+project(NP_schedulabiliy_test VERSION 3.1.2 LANGUAGES CXX)
 
 include_directories(include)
 include_directories(lib/include)
@@ -79,6 +79,13 @@ endif ()
 
 set(YAML_LIB yaml-cpp)
 set(CORE_LIBS ${TBB_LIB} ${ALLOC_LIB} ${YAML_LIB})
+
+# Pass version to the compiler
+add_definitions(
+        -DVERSION_MAJOR=${NP_schedulabiliy_test_VERSION_MAJOR}
+        -DVERSION_MINOR=${NP_schedulabiliy_test_VERSION_MINOR}
+        -DVERSION_PATCH=${NP_schedulabiliy_test_VERSION_PATCH}
+)
 
 file(GLOB TEST_SOURCES "src/tests/*.cpp")
 add_executable(runtests ${TEST_SOURCES} ${SOURCES})

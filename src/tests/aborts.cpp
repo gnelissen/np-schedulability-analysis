@@ -41,6 +41,14 @@ TEST_CASE("[uni] basic aborts") {
 	Analysis_options opts;
 	opts.early_exit = false;
 
+	/*
+	schedule:
+	T3: completion at [5, 5]
+	T1: completion at [35, 56]
+	T4: completion at [35, 56] (does not even start)
+	T2: completion at [37, 60]
+	*/
+
 	auto space = Global::State_space<dtime_t>::explore(prob, opts);
 	CHECK_FALSE(space->is_schedulable());
 

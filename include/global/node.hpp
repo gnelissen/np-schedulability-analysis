@@ -62,22 +62,31 @@ namespace NP {
 			}
 
 			Schedule_node(
-				const std::vector<unsigned int>& num_cores,
-				const std::vector<Time>& next_earliest_release,
-				const std::vector<Time>& next_certain_source_job_release, // the next time a job without predecessor is certainly released
-				const std::vector<Time>& next_certain_sequential_source_job_release // the next time a job without predecessor that can execute on a single core is certainly released
-			)
+				const std::vector<unsigned int>& num_cores, const State_space_data<Time>& state_space_data)
 				: lookup_key{ 0 }
 				, num_cpus(num_cores)
 				, finish_time(num_cores.size(), { 0,0 })
 				, latest_core_availability(num_cores.size(), 0)
 				, num_jobs_scheduled(0)
-				, earliest_pending_release{ next_earliest_release }
 				, next_certain_successor_jobs_disptach(num_cores.size(), Time_model::constants<Time>::infinity())
-				, next_certain_source_job_release{ next_certain_source_job_release }
-				, next_certain_sequential_source_job_release{ next_certain_sequential_source_job_release }
-				, next_certain_gang_source_job_disptach(num_cores.size(), Time_model::constants<Time>::infinity())
 			{
+				int num_clusters = num_cores.size();
+				next_certain_source_job_release.reserve(num_clusters);
+				next_certain_sequential_source_job_release.reserve(num_clusters);
+				next_certain_gang_source_job_disptach.reserve(num_clusters);
+				earliest_pending_release.reserve(num_clusters);
+				for (int i = 0; i < num_clusters; i++)
+				{
+					earliest_pending_release.push_back(state_space_data.get_earliest_possible_source_job_release(i));
+
+					Time seq_rel = state_space_data.get_earliest_certain_seq_source_job_release(i);
+					next_certain_sequential_source_job_release.push_back(seq_rel);
+
+					Time gang_rel = state_space_data.get_earliest_certain_gang_source_job_release(i);
+					next_certain_gang_source_job_disptach.push_back(gang_rel);
+
+					next_certain_source_job_release.push_back(std::min(seq_rel, gang_rel));
+				}
 			}
 
 			// transition: new node by scheduling a job 'j' in an existing node 'from'
@@ -148,6 +157,11 @@ namespace NP {
 			Time get_next_certain_source_job_release(const unsigned int cluster) const
 			{
 				return next_certain_source_job_release[cluster];
+			}
+
+			const std::vector<Time>& get_next_certain_source_job_releases() const
+			{
+				return next_certain_source_job_release;
 			}
 
 			Time get_next_certain_sequential_source_job_release(const unsigned int cluster) const
@@ -284,23 +298,27 @@ namespace NP {
 			}
 
 			// try to merge state 's' with up to 'budget' states already recorded in this node. 
-			// The option 'useJobFinishTimes' controls whether or not the job finish time intervals of jobs 
+			// The option 'conservative' allow a merge of twos states to happen only if the availability 
+			// intervals of one state are constained in the availability intervals of the other state. If
+			// the conservative option is used, the budget parameter is ignored.
+			// The option 'use_job_finish_times' controls whether or not the job finish time intervals of jobs 
 			// with pending successors must overlap to allow two states to merge. Setting it to true should 
 			// increase accurracy of the analysis but increases runtime significantly.
-			bool merge_states(const Schedule_state<Time>& s, bool useJobFinishTimes = false, int budget = 1)
+			// The 'budget' defines how many states can be merged at once. If 'budget = -1', then there is no limit. 
+			// Returns the number of existing states the new state was merged with.
+			int merge_states(const Schedule_state<Time>& s, bool conservative, bool use_job_finish_times = false, int budget = 1)
 			{
-				// try to merge with up to 'budget' states if possible.
-				int merge_budget = budget;
+				// if we do not use a conservative merge, try to merge with up to 'budget' states if possible.
+				int merge_budget = conservative ? 1 : budget;
 
-				std::deque<State*>::iterator last_state_merged;
-				//State* last_state_merged;
+				State* last_state_merged;
 				bool result = false;
-				for (auto state_it = states.begin(); state_it != states.end(); ++state_it)
+				for (auto it = states.begin(); it != states.end();)
 				{
-					State* state = *state_it;
+					State* state = *it;
 					if (result == false)
 					{
-						if (state->try_to_merge(s, useJobFinishTimes))
+						if (state->try_to_merge(s, conservative, use_job_finish_times))
 						{
 							for (int i = 0; i < num_cpus.size(); i++) {
 								// Update the node finish_time
@@ -317,29 +335,33 @@ namespace NP {
 							if (merge_budget == 0)
 								break;
 
-							last_state_merged = state_it;
+							last_state_merged = state;
 						}
+						++it;
 					}
 					else // if we already merged with one state at least
 					{
-						if (state->try_to_merge(**last_state_merged, useJobFinishTimes))
+						if (last_state_merged->try_to_merge(*state, conservative, use_job_finish_times))
 						{
 							// the state was merged => we can thus remove the old one from the list of states
-							states.erase(last_state_merged);
-							delete* last_state_merged;
+							it = states.erase(it);
+							delete state;
 
 							// Try to merge with a few more states.
 							// std::cerr << "Merged with " << merge_budget << " of " << states.size() << " states left.\n";
 							merge_budget--;
 							if (merge_budget == 0)
 								break;
-
-							last_state_merged = state_it;
 						}
+						else
+							++it;
 					}
 				}
 
-				return result;
+				if (conservative)
+					return result;
+				else
+					return (budget - merge_budget);
 			}
 		};
 	}

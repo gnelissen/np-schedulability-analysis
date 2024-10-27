@@ -13,10 +13,14 @@
 #include "jobs.hpp"
 #include "util.hpp"
 #include "interval.hpp"
+#include "index_set.hpp"
+#include "global/state_space_data.hpp"
 
 namespace NP {
 
 	namespace Global {
+
+		template<class Time> class State_space_data;
 
 		typedef std::vector<Job_index> Job_precedence_set;
 
@@ -24,14 +28,17 @@ namespace NP {
 		{
 		private:
 
-			typedef std::vector<Interval<Time>> CoreAvailability;
+			typedef std::vector<Interval<Time>> Core_availability;
 			typedef std::vector<std::pair<const Job<Time>*, Interval<Time>>> Susp_list;
 			typedef std::vector<Susp_list> Successors;
 			typedef std::vector<Susp_list> Predecessors;
 			typedef Interval<unsigned int> Parallelism;
+			typedef Index_set Job_set;
+
+			unsigned int cluster_id;
 
 			// system availability intervals
-			CoreAvailability core_avail;
+			Core_availability core_avail;
 
 			// keeps track of the earliest time a job with at least one predecessor is certainly ready and certainly has enough free cores to start executing
 			Time earliest_certain_successor_job_disptach;
@@ -62,11 +69,12 @@ namespace NP {
 		public:
 
 			// initial state -- nothing yet has finished, nothing is running
-			Cluster_state(const unsigned int num_processors, const Time next_certain_gang_source_job_disptach)
+			Cluster_state(const unsigned int id, const unsigned int num_processors, const Time earliest_certain_gang_source_job_release)
 				: core_avail{ num_processors, Interval<Time>(Time(0), Time(0)) }
 				, certain_jobs{}
 				, earliest_certain_successor_job_disptach{ Time_model::constants<Time>::infinity() }
-				, earliest_certain_gang_source_job_disptach{ next_certain_gang_source_job_disptach }
+				, earliest_certain_gang_source_job_disptach{ earliest_certain_gang_source_job_release }
+				, cluster_id{id}
 			{
 				assert(core_avail.size() > 0);
 			}
@@ -75,14 +83,16 @@ namespace NP {
 			Cluster_state(
 				const Cluster_state& from,
 				Job_index j,
-				const Job_precedence_set& predecessors,
 				Interval<Time> start_times,
 				Interval<Time> finish_times,
-				const Time next_certain_gang_source_job_disptach,
+				const Job_set& scheduled_jobs,
+				const State_space_data<Time>& state_space_data,
+				Time next_source_job_rel,
 				unsigned int ncores = 1)
-				: earliest_certain_gang_source_job_disptach(next_certain_gang_source_job_disptach)
-				, earliest_certain_successor_job_disptach(Time_model::constants<Time>::infinity())
+				: earliest_certain_successor_job_disptach(Time_model::constants<Time>::infinity())
+				, cluster_id(from.cluster_id)
 			{
+				const Job_precedence_set& predecessors = state_space_data.predecessors_of(j);
 				// update the set of certainly running jobs
 				update_certainly_running_jobs(from, j, start_times, finish_times, ncores, predecessors);
 
@@ -90,6 +100,9 @@ namespace NP {
 				update_core_avail(from, j, predecessors, start_times, finish_times, ncores);
 
 				assert(core_avail.size() > 0);
+
+				// NOTE: must be done after the core availabilities have been updated
+				update_earliest_certain_gang_source_job_disptach(next_source_job_rel, scheduled_jobs, state_space_data);
 			}
 
 			// copy constructor
@@ -98,6 +111,7 @@ namespace NP {
 				, core_avail(origin.core_avail)
 				, earliest_certain_gang_source_job_disptach(origin.earliest_certain_gang_source_job_disptach)
 				, earliest_certain_successor_job_disptach(origin.earliest_certain_successor_job_disptach)
+				, cluster_id(origin.cluster_id)
 			{
 			}
 
@@ -136,30 +150,62 @@ namespace NP {
 				earliest_certain_successor_job_disptach = next_certain_successor_job_disptach;
 			}
 
-			bool core_avail_overlap(const CoreAvailability& other) const
+			// returns true if the availability intervals of one state overlaps with the other state.
+			// Conservative means that all the availability intervals of one state must be within 
+			// the interval of the other state.
+			// If conservative is false, the a simple overlap or contiguity between inverals is enough.
+			// If conservative is true, then sets `other_in_this` to true if all availability intervals
+			// of other are subintervals of this. Otherwise, `other_in_this` is set to false.
+			bool core_avail_overlap(const Core_availability& other, bool conservative, bool& other_in_this) const
 			{
 				assert(core_avail.size() == other.size());
-				for (int i = 0; i < core_avail.size(); i++)
-					if (!core_avail[i].intersects(other[i]))
-						return false;
+				other_in_this = false;
+				// Conservative means that all the availability intervals of one state must be within 
+				// the interval of the other state.
+				// If conservative is false, the a simple overlap or contiguity between inverals is enough
+				if (conservative) {
+					bool overlap = true;
+					// check if all availability intervals of other are within the intervals of this
+					for (int i = 0; i < core_avail.size(); i++) {
+						if (!core_avail[i].contains(other[i])) {
+							overlap = false;
+							break;
+						}
+					}
+					if (overlap == true) {
+						other_in_this = true;
+						return true;
+					}
+					// check if all availability intervals of this are within the intervals of other
+					for (int i = 0; i < core_avail.size(); i++) {
+						if (!other[i].contains(core_avail[i])) {
+							return false;;
+						}
+					}
+				}
+				else {
+					for (int i = 0; i < core_avail.size(); i++)
+						if (!core_avail[i].intersects(other[i]))
+							return false;
+				}
 				return true;
 			}
 
 			// check if 'other' state can merge with this state
-			bool can_merge_with(const Cluster_state<Time>& other) const
+			bool can_merge_with(const Cluster_state<Time>& other, bool conservative, bool& other_in_this) const
 			{
-				return core_avail_overlap(other.core_avail);
+				return core_avail_overlap(other.core_avail, conservative, other_in_this);
 			}
 
-			bool can_merge_with(const CoreAvailability& cav) const
+			bool can_merge_with(const Core_availability& cav, bool conservative, bool& other_in_this) const
 			{
-				return core_avail_overlap(cav);
+				return core_avail_overlap(cav, conservative, other_in_this);
 			}
 
 			// first check if 'other' state can merge with this state, then, if yes, merge 'other' with this state.
-			bool try_to_merge(const Cluster_state<Time>& other)
+			bool try_to_merge(const Core_availability& other, bool conservative)
 			{
-				if (!can_merge_with(other))
+				if (!can_merge_with(other, conservative))
 					return false;
 
 				merge(other.core_avail, other.certain_jobs, other.earliest_certain_successor_job_disptach);
@@ -174,7 +220,7 @@ namespace NP {
 			}
 
 			void merge(
-				const CoreAvailability& cav,
+				const Core_availability& cav,
 				const std::vector<Running_job>& cert_j,
 				Time ecsj_ready_time)
 			{
@@ -367,6 +413,33 @@ namespace NP {
 				}
 				delete[] pa;
 				delete[] ca;
+			}
+
+			// finds the earliest time a gang source job (i.e., a job without predecessors that requires more than one core to start executing)
+			// is certainly released and has enough cores available to start executing at or after time `after`
+			void update_earliest_certain_gang_source_job_disptach(
+				Time after,
+				const Job_set& scheduled_jobs,
+				const State_space_data<Time>& state_space_data)
+			{
+				earliest_certain_gang_source_job_disptach = Time_model::constants<Time>::infinity();
+
+				for (auto it = state_space_data.gang_source_jobs_by_latest_arrival_by_cluster[cluster_id].lower_bound(after);
+					it != state_space_data.gang_source_jobs_by_latest_arrival_by_cluster[cluster_id].end(); it++)
+				{
+					const Job<Time>* jp = it->second;
+					if (jp->latest_arrival() >= earliest_certain_gang_source_job_disptach)
+						break;
+
+					// skip if it is the one we're ignoring or the job was dispatched already
+					if (scheduled_jobs.contains(jp->get_job_index()))
+						continue;
+
+					// it's incomplete and not ignored 
+					earliest_certain_gang_source_job_disptach = std::min(earliest_certain_gang_source_job_disptach,
+						std::max(jp->latest_arrival(),
+							core_availability(jp->get_min_parallelism()).max()));
+				}
 			}
 		};
 	}

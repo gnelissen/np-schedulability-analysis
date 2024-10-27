@@ -14,6 +14,7 @@
 #include "jobs.hpp"
 #include "statistics.hpp"
 #include "util.hpp"
+#include "global/state_space_data.hpp"
 #include "global/cluster.hpp"
 
 namespace NP {
@@ -23,10 +24,14 @@ namespace NP {
 		typedef Index_set Dispatched_job_set;
 		typedef std::vector<Job_index> Job_precedence_set;
 
+		template<class Time> class State_space_data;
+
+		template<class Time> class Schedule_node;
+
 		template<class Time> class Schedule_state
 		{
 			typedef const Job<Time>* Job_ref;
-			typedef std::vector<std::pair<Job_ref, Interval<Time>>> JobFinishTimes;
+			typedef std::vector<std::pair<Job_ref, Interval<Time>>> Job_finish_times;
 			typedef std::vector<std::pair<Job_ref, Interval<Time>>> Susp_list;
 			typedef std::vector<Susp_list> Successors;
 			typedef std::vector<Susp_list> Predecessors;
@@ -34,28 +39,17 @@ namespace NP {
 		private:
 			std::vector<Cluster_state<Time>> clusters;
 			// job_finish_times holds the finish times of all the jobs that still have an unscheduled successor
-			JobFinishTimes job_finish_times;
+			Job_finish_times job_finish_times;
 
 		public:
 			// initial state -- nothing yet has finished, nothing is running
-			Schedule_state(const std::vector<unsigned int>& num_cpus)
+			Schedule_state(const std::vector<unsigned int>& num_cpus, const State_space_data<Time>& spdata)
 			{
 				assert(num_cpus.size() > 0);
 				clusters.reserve(num_cpus.size());
 				for (int i = 0; i < num_cpus.size(); i++)
 				{
-					clusters.emplace_back(num_cpus[i], Time_model::constants<Time>::infinity());
-				}
-			}
-
-			// initial state -- nothing yet has finished, nothing is running
-			Schedule_state(const std::vector<unsigned int>& num_cpus, const std::vector<Time>& next_certain_gang_job_release)
-			{
-				assert(num_cpus.size() > 0);
-				clusters.reserve(num_cpus.size());
-				for (int i=0; i < num_cpus.size(); i++)
-				{
-					clusters.emplace_back(num_cpus[i], next_certain_gang_job_release[i]);
+					clusters.emplace_back(i, num_cpus[i], spdata.get_earliest_certain_gang_source_job_release(i));
 				}
 			}
 
@@ -63,19 +57,20 @@ namespace NP {
 			Schedule_state(
 				const Schedule_state& from,
 				const Job<Time>& j,
-				const Job_precedence_set& predecessors,
 				Interval<Time> start_times,
 				Interval<Time> finish_times,
 				const Dispatched_job_set& scheduled_jobs,
-				const Successors& successors_of,
-				const Predecessors& predecessors_of,
-				const Time next_certain_gang_source_job_disptach,
+				const State_space_data<Time>& state_space_data,
+				Time next_source_job_rel,
 				unsigned int ncores = 1)
 			{
+				const Successors& successors_of = state_space_data.successors_suspensions;
+				const Predecessors& predecessors_of = state_space_data.predecessors_suspensions;
+				const Job_precedence_set & predecessors = state_space_data.predecessors_of(j);
 				clusters.reserve(from.clusters.size());
 				for (int i = 0; i < from.clusters.size(); i++) {
 					if (i == j.get_affinity())
-						clusters.emplace_back(from.cluster(i), j.get_job_index(), predecessors, start_times, finish_times, next_certain_gang_source_job_disptach, ncores);
+						clusters.emplace_back(from.cluster(i), j.get_job_index(), start_times, finish_times, scheduled_jobs, state_space_data, next_source_job_rel, ncores);
 					else
 						clusters.emplace_back(from.cluster(i));
 				}
@@ -92,15 +87,13 @@ namespace NP {
 				const std::vector<Interval<Time>>& finish_times,
 				const std::vector<unsigned int>& ncores,
 				const Dispatched_job_set& scheduled_jobs,
-				const std::vector<Job_precedence_set>& predecessors,
-				const Successors& successors_of,
-				const Predecessors& predecessors_of,
-				const std::vector<Time>& next_certain_gang_source_job_disptach)
+				const State_space_data<Time>& state_space_data,
+				const std::vector<Time>& next_source_job_rel)
 			{
 				assert(j_set.size() == from.clusters.size());
 				assert(start_times.size() == from.clusters.size());
 				assert(finish_times.size() == from.clusters.size());
-				assert(next_certain_gang_source_job_disptach.size() == from.clusters.size());
+				assert(next_source_job_rel.size() == from.clusters.size());
 				assert(ncores.size() == from.clusters.size());
 
 				clusters.reserve(from.clusters.size());
@@ -112,14 +105,14 @@ namespace NP {
 					else
 					{
 						Job_index j_idx = j->get_job_index();
-						// check if j has precedence constraints
-						const Job_precedence_set& pred = predecessors.size() > j_idx ? predecessors[j_idx] : Job_precedence_set{};
-						clusters.push_back(Cluster_state<Time>(from.cluster(i), j_idx, pred, start_times[i], finish_times[i], next_certain_gang_source_job_disptach[i], ncores[i]));
+						clusters.emplace_back(from.cluster(i), j_idx, start_times[i], finish_times[i], scheduled_jobs, state_space_data, next_source_job_rel[i], ncores[i]);
 					}
 				}
 				assert(clusters.size() == from.clusters.size());
 
 				// save the job finish time of every job with a successor that is not executed yet in the current state
+				const Successors& successors_of = state_space_data.successors_suspensions;
+				const Predecessors& predecessors_of = state_space_data.predecessors_suspensions;
 				update_job_finish_times(from, j_set, start_times, finish_times, successors_of, predecessors_of, scheduled_jobs);
 
 				DM("*** new state: constructed " << *this << std::endl);
@@ -147,22 +140,23 @@ namespace NP {
 			}
 
 			// check if 'other' state can merge with this state
-			bool can_merge_with(const Schedule_state<Time>& other, bool useJobFinishTimes = false) const
+			bool can_merge_with(const Schedule_state<Time>& other, bool conservative = false, bool use_job_finish_times = false) const
 			{
+				bool other_in_this;
 				for (int i = 0; i < clusters.size(); i++) {
-					if (!clusters[i].can_merge_with(other.clusters[i]))
+					if (!clusters[i].can_merge_with(other.clusters[i], conservative, other_in_this))
 						return false;
 				}
-				if (useJobFinishTimes)
-					return check_finish_times_overlap(other.job_finish_times);
+				if (use_job_finish_times)
+					return check_finish_times_overlap(other.job_finish_times, conservative, other_in_this);
 				else
 					return true;
 			}
 
 			// first check if 'other' state can merge with this state, then, if yes, merge 'other' with this state.
-			bool try_to_merge(const Schedule_state<Time>& other, bool useJobFinishTimes = false)
+			bool try_to_merge(const Schedule_state<Time>& other, bool conservative, bool use_job_finish_times = false)
 			{
-				if (!can_merge_with(other, useJobFinishTimes))
+				if (!can_merge_with(other, conservative, use_job_finish_times))
 					return false;
 
 				for (int i = 0; i < clusters.size(); i++)
@@ -349,8 +343,7 @@ namespace NP {
 				for (int i = 0; i < clusters.size(); i++)
 					clusters[i].set_earliest_certain_successor_job_disptach(earliest_certain_successor_job_disptach[i]);
 			}
-			
-			
+
 			// update the list of finish times of jobs with successors w.r.t. the previous system state
 			// and calculate the earliest time a job with precedence constraints will become ready to dispatch
 			void update_job_finish_times(const Schedule_state& from,
@@ -502,37 +495,53 @@ namespace NP {
 			}
 
 			// Check whether the job_finish_times overlap.
-			bool check_finish_times_overlap(const JobFinishTimes& from_pwj) const
+			bool check_finish_times_overlap(const Job_finish_times& other_ft, bool conservative = false, const bool other_in_this = false) const
 			{
-				bool allJobsIntersect = true;
-				// The JobFinishTimes vectors are sorted.
+				bool all_jobs_intersect = true;
+				// The Job_finish_times vectors are sorted.
 				// Check intersect for matching jobs.
-				auto from_it = from_pwj.begin();
+				auto other_it = other_ft.begin();
 				auto state_it = job_finish_times.begin();
-				while (from_it != from_pwj.end() &&
+				while (other_it != other_ft.end() &&
 					state_it != job_finish_times.end())
 				{
-					if (from_it->first == state_it->first)
+					if (other_it->first == state_it->first)
 					{
-						if (!from_it->second.intersects(state_it->second))
-						{
-							allJobsIntersect = false;
-							break;
+						if (conservative) {
+							if (other_in_this == false && !other_it->second.contains(state_it->second))
+							{
+								all_jobs_intersect = false; // not all the finish time intervals of this are within those of other
+								break;
+							}
+							else if (other_in_this == true && !state_it->second.contains(other_it->second))
+							{
+								all_jobs_intersect = false; // not all the finish time intervals of other are within those of this
+								break;
+							}
 						}
-						from_it++;
+						else {
+							if (!other_it->second.intersects(state_it->second))
+							{
+								all_jobs_intersect = false;
+								break;
+							}
+						}
+						other_it++;
 						state_it++;
 					}
-					else if (from_it->first < state_it->first)
-						from_it++;
+					else if (conservative)
+						return false; // the list of finish time intervals do not match
+					else if (other_it->first < state_it->first)
+						other_it++;
 					else
 						state_it++;
 				}
-				return allJobsIntersect;
+				return all_jobs_intersect;
 			}
 
-			void widen_finish_times(const JobFinishTimes& from_pwj)
+			void widen_finish_times(const Job_finish_times& from_pwj)
 			{
-				// The JobFinishTimes vectors are sorted.
+				// The Job_finish_times vectors are sorted.
 				// Assume check_overlap() is true.
 				auto from_it = from_pwj.begin();
 				auto state_it = job_finish_times.begin();
@@ -552,7 +561,7 @@ namespace NP {
 				}
 			}
 
-			// Find the offset in the JobFinishTimes vector where the index j should be located.
+			// Find the offset in the Job_finish_times vector where the index j should be located.
 			int jft_find(const Job_index j) const
 			{
 				int start = 0;
