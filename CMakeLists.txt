@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.8.0)
 
-project(NP_schedulabiliy_test VERSION 3.1.2 LANGUAGES CXX)
+project(NP_schedulabiliy_test_clustered VERSION 1.0.0 LANGUAGES CXX)
 
 include_directories(include)
 include_directories(lib/include)
