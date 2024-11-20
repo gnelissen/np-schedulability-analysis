@@ -1,3 +1,5 @@
+**IMPORTANT NOTE: this repository is not the main repository for the SAG framework anymore. Since July 2024, all officially supported SAG related projects are hosted by a Github organisation [here](https://github.com/SAG-org).**
+
 # NP Schedulability Test
 
 This repository contains the implementations of schedulability tests for **sets of non-preemptive jobs** with **precedence constraints** scheduled on either **uniprocessors** or **globally scheduled identical multiprocessors**. The analyses are described in the following papers:
