@@ -3,7 +3,11 @@
 #include <fstream>
 #include <algorithm>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#define NOMINMAX
+#include <Windows.h>
+#include <psapi.h>
+#else
 #include <sys/resource.h>
 #endif
 
@@ -265,8 +269,12 @@ static void process_file(const std::string& fname)
 			}
 		}
 
-#ifdef _WIN32 // rusage does not work under Windows
-		long mem_used = 0;
+#ifdef _WIN32
+		PROCESS_MEMORY_COUNTERS pmc;
+		auto currentProcess = GetCurrentProcess();
+		GetProcessMemoryInfo(currentProcess, &pmc, sizeof(pmc));
+		long mem_used = pmc.PeakWorkingSetSize / 1024; //in kiB
+		CloseHandle(currentProcess);
 #else
 		struct rusage u;
 		long mem_used = 0;
@@ -429,7 +437,7 @@ int main(int argc, char** argv)
 	//all the options that could have been entered above are processed below and appropriate variables
 	// are assigned their respective values.
 
-	if(options.get("version")){
+	if (options.get("version")) {
 		std::cout << parser.prog() <<" version "
 				  	<< VERSION_MAJOR << "."
 					<< VERSION_MINOR << "."
