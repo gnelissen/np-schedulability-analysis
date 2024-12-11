@@ -436,9 +436,9 @@ namespace NP {
 									// create a dummy node for explanation purposes
 									auto frange = new_n.finish_range(i) + j.get_cost(pmin);
 									Node& next =
-										new_node(1, new_n, j, j.get_job_index(), 0, 0, 0);
+										new_node(1, new_n, j, j.get_job_index(), state_space_data.predecessors_suspensions, state_space_data.successors_suspensions, 0, 0, 0);
 									//const CoreAvailability empty_cav = {};
-									State& next_s = new_state(*(new_n.get_states()->front()), j, frange, frange, new_n.get_scheduled_jobs(), state_space_data, 0, pmin);
+									State& next_s = new_state(*(new_n.get_states()->front()), j, frange, frange, new_n.get_scheduled_jobs(), new_n.get_ready_successor_jobs(), state_space_data, 0, pmin);
 									next.add_state(&next_s);
 									num_states++;
 
@@ -737,7 +737,7 @@ namespace NP {
 							if (idx != NULL_JOB_INDEX)
 								idx_set.push_back(idx);
 						}
-						next_node = &(new_node(n_jobs_dispatched, old_node, dispatched_set, idx_set, next_job_rel, next_source_job_rel, next_seq_source_job_rel));
+						next_node = &(new_node(n_jobs_dispatched, old_node, dispatched_set, idx_set, state_space_data.predecessors_suspensions, state_space_data.successors_suspensions, next_job_rel, next_source_job_rel, next_seq_source_job_rel));
 					}
 					else if (next_node == NULL) {
 						std::vector<Job_index> idx_set;
@@ -760,14 +760,14 @@ namespace NP {
 						}
 						// If there is no node yet, create one.
 						if (next_node == NULL) {
-							next_node = &(new_node(n_jobs_dispatched, old_node, dispatched_set, idx_set, next_job_rel, next_source_job_rel, next_seq_source_job_rel));
+							next_node = &(new_node(n_jobs_dispatched, old_node, dispatched_set, idx_set, state_space_data.predecessors_suspensions, state_space_data.successors_suspensions, next_job_rel, next_source_job_rel, next_seq_source_job_rel));
 						}
 					}
 #endif
 					// next_node should always exist at this point, possibly without states in it
 					// create a new state resulting from scheduling j in state s on p cores and try to merge it with an existing state in node 'next'.							
 					new_or_merge_state(*next_node, old_state, dispatched_set, stimes, ftimes, n_cores,
-						next_node->get_scheduled_jobs(), state_space_data, next_node->get_next_certain_source_job_releases());
+						next_node->get_scheduled_jobs(), next_node->get_ready_successor_jobs(), state_space_data, next_node->get_next_certain_source_job_releases());
 
 					// make sure we didn't skip any jobs which would then certainly miss its deadline
 					// only do that if we stop the analysis when a deadline miss is found 

@@ -24,6 +24,10 @@ namespace NP {
 		private:
 
 			typedef typename std::vector<Interval<Time>> CoreAvailability;
+			typedef std::vector<std::pair<const Job<Time>*, Interval<Time>>> Susp_list;
+			typedef std::vector<Susp_list> Successors;
+			typedef std::vector<Susp_list> Predecessors;
+
 			std::vector<Time> earliest_pending_release;
 			std::vector<Time> next_certain_successor_jobs_disptach;
 			std::vector<Time> next_certain_source_job_release;
@@ -36,6 +40,9 @@ namespace NP {
 			std::vector<Time> latest_core_availability;
 			std::vector<unsigned int> num_cpus; //number of cpus in each cluster
 			unsigned int num_jobs_scheduled;
+
+			// set of jobs that have all their predecessors completed and were not dispatched yet
+			std::vector<const Job<Time>*> ready_successor_jobs;
 
 			// no accidental copies
 			Schedule_node(const Schedule_node& origin) = delete;
@@ -94,6 +101,8 @@ namespace NP {
 				const Schedule_node& from,
 				const Job<Time>& j,
 				std::size_t idx,
+				const Predecessors& pred,
+				const Successors& succ,
 				const Time next_earliest_release,
 				const Time next_certain_source_job_release, // the next time a job without predecessor is certainly released
 				const Time next_certain_sequential_source_job_release // the next time a job without predecessor that can execute on a single core is certainly released
@@ -113,6 +122,7 @@ namespace NP {
 				earliest_pending_release[j.get_affinity()] = next_earliest_release;
 				this->next_certain_source_job_release[j.get_affinity()] = next_certain_source_job_release;
 				this->next_certain_sequential_source_job_release[j.get_affinity()] = next_certain_sequential_source_job_release;
+				update_ready_successors(from, std::vector<Job_index> {idx}, succ, pred, this->scheduled_jobs);
 			}
 
 			// transition: new node by scheduling a set of jobs in an existing node 'from'
@@ -120,6 +130,8 @@ namespace NP {
 				const Schedule_node& from,
 				const std::vector<const Job<Time>*> j_set,
 				const std::vector<Job_index>& idx_set,
+				const Predecessors& pred,
+				const Successors& succ,
 				const std::vector<Time>& next_earliest_release,
 				const std::vector<Time>& next_certain_source_job_release, // the next time a job without predecessor is certainly released
 				const std::vector<Time>& next_certain_sequential_source_job_release // the next time a job without predecessor that can execute on a single core is certainly released
@@ -136,6 +148,7 @@ namespace NP {
 				, next_certain_sequential_source_job_release{ next_certain_sequential_source_job_release }
 				, next_certain_gang_source_job_disptach(from.num_cpus.size(), Time_model::constants<Time>::infinity()) // set to infinity because depends on states and there is no state in the node yet
 			{
+				update_ready_successors(from, idx_set, succ, pred, this->scheduled_jobs);
 			}
 
 			~Schedule_node()
@@ -257,6 +270,16 @@ namespace NP {
 				return latest_core_availability[cluster_id];
 			}
 
+			const std::vector<const Job<Time>*>& get_ready_successor_jobs() const
+			{
+				return ready_successor_jobs;
+			}
+
+			/*const std::vector<Job_index>& get_jobs_with_pending_successors() const
+			{
+				return jobs_with_pending_succ;
+			}*/
+
 			void add_state(State* s)
 			{
 				// Update finish_time
@@ -362,6 +385,45 @@ namespace NP {
 					return result;
 				else
 					return (budget - merge_budget);
+			}
+
+		private:
+			// update the list of jobs that have all their predecessors completed and were not dispatched yet
+			void update_ready_successors(const Schedule_node& from,
+				const std::vector<Job_index>& idx_set, 
+				const Successors& successors_of,
+				const Predecessors& predecessors_of,
+				const Dispatched_job_set& scheduled_jobs)
+			{
+				unsigned int n_succ = 0;
+				for (Job_index j : idx_set)
+					n_succ += successors_of[j].size();
+				ready_successor_jobs.reserve(from.ready_successor_jobs.size() + n_succ);
+				
+				// add all jobs that were ready and were not one of the last job dispatched
+				for (const Job<Time>* rj : from.ready_successor_jobs)
+				{
+					if (!scheduled_jobs.contains(rj->get_job_index()))
+						ready_successor_jobs.push_back(rj);
+				}
+
+				for (Job_index j : idx_set) {
+					for (const auto& succ : successors_of[j])
+					{
+						bool ready = true;
+						for (const auto& pred : predecessors_of[succ.first->get_job_index()])
+						{
+							auto from_job = pred.first->get_job_index();
+							if (from_job != j && !scheduled_jobs.contains(from_job))
+							{
+								ready = false;
+								break;
+							}
+						}
+						if (ready)
+							ready_successor_jobs.push_back(succ.first);
+					}
+				}
 			}
 		};
 	}
