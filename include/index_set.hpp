@@ -14,6 +14,9 @@ namespace NP {
 			// new empty job set
 			Index_set() : the_set() {}
 
+			Index_set(std::size_t size) : the_set((size / 64) + 1, 0) 
+			{}
+
 			// derive a new set by "cloning" an existing set and adding an index
 			Index_set(const Index_set& from, std::size_t idx)
 					: the_set(std::max(from.the_set.size(), (idx / 64) + 1))

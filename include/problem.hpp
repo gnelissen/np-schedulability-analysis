@@ -1,6 +1,7 @@
 #ifndef NP_PROBLEM_HPP
 #define NP_PROBLEM_HPP
 
+#include "tasks.hpp"
 #include "jobs.hpp"
 #include "precedence.hpp"
 #include "aborts.hpp"
@@ -12,12 +13,14 @@ namespace NP {
 	struct Scheduling_problem {
 
 		typedef typename Job<Time>::Job_set Workload;
+	    typedef typename Task<Time>::Task_set Task_set;
 		typedef typename std::vector<Abort_action<Time>> Abort_actions;
 		typedef typename std::vector<Precedence_constraint<Time>> Precedence_constraints;
 
 		// ** Description of the workload:
-		// (1) a set of jobs
-		Workload jobs;
+		// (1) a set of jobs and recurrent tasks
+	    Workload jobs;
+	    Task_set tasks;
 		// (2) a set of precedence constraints among the jobs
 		Precedence_constraints prec;
 		// (3) abort actions for (some of) the jobs
@@ -29,9 +32,11 @@ namespace NP {
 		unsigned int num_processors;
 
 		// Classic default setup: no abort actions
-		Scheduling_problem(const Workload& jobs, const Precedence_constraints& prec,
+	    Scheduling_problem(const Task_set& tasks, const Workload& jobs,
+	                       const Precedence_constraints& prec,
 		                   unsigned int num_processors = 1)
 		: num_processors(num_processors)
+		, tasks(tasks)
 		, jobs(jobs)
 		, prec(prec)
 		{
@@ -40,10 +45,12 @@ namespace NP {
 		}
 
 		// Constructor with abort actions and precedence constraints
-		Scheduling_problem(const Workload& jobs, const Precedence_constraints& prec,
+	    Scheduling_problem(const Task_set& tasks, const Workload& jobs,
+	                       const Precedence_constraints& prec,
 		                   const Abort_actions& aborts,
 		                   unsigned int num_processors)
 		: num_processors(num_processors)
+		, tasks(tasks)
 		, jobs(jobs)
 		, prec(prec)
 		, aborts(aborts)
@@ -54,9 +61,10 @@ namespace NP {
 		}
 
 		// Convenience constructor: no DAG, no abort actions
-		Scheduling_problem(const Workload& jobs,
+	    Scheduling_problem(const Task_set& tasks, const Workload& jobs,
 		                   unsigned int num_processors = 1)
-		: jobs(jobs)
+		: tasks(tasks)
+		, jobs(jobs)
 		, num_processors(num_processors)
 		{
 			assert(num_processors > 0);
