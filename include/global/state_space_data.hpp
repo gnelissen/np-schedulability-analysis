@@ -26,7 +26,8 @@ namespace NP {
 		public:
 
 			typedef Scheduling_problem<Time> Problem;
-			typedef typename Scheduling_problem<Time>::Workload Workload;
+			typedef typename Scheduling_problem<Time>::Job_set Job_set;
+			typedef typename Scheduling_problem<Time>::Task_set Task_set;
 			typedef typename Scheduling_problem<Time>::Precedence_constraints Precedence_constraints;
 			typedef typename Scheduling_problem<Time>::Abort_actions Abort_actions;
 			typedef Schedule_state<Time> State;
@@ -56,10 +57,11 @@ namespace NP {
 
 			// number of cores
 			const unsigned int num_cpus;
-		
+
 		public:
 			// use these const references to ensure read-only access
-			const Workload& jobs;
+			const Job_set& jobs;
+			const Task_set& tasks;
 			const By_time_map& jobs_by_earliest_arrival;
 			const By_time_map& jobs_by_deadline;
 			const By_time_map& successor_jobs_by_latest_arrival;
@@ -69,11 +71,12 @@ namespace NP {
 			const std::vector<Suspensions_list>& predecessors_suspensions;
 			const std::vector<Suspensions_list>& successors_suspensions;
 
-			State_space_data(const Workload& jobs,
+			State_space_data(const Job_set& jobs,
 				const Precedence_constraints& edges,
 				const Abort_actions& aborts,
 				unsigned int num_cpus)
 				: jobs(jobs)
+				, tasks{}
 				, num_cpus(num_cpus)
 				, successor_jobs_by_latest_arrival(_successor_jobs_by_latest_arrival)
 				, sequential_source_jobs_by_latest_arrival(_sequential_source_jobs_by_latest_arrival)
@@ -105,7 +108,7 @@ namespace NP {
 					else {
 						_gang_source_jobs_by_latest_arrival.insert({ j.latest_arrival(), &j });
 						_jobs_by_earliest_arrival.insert({ j.earliest_arrival(), &j });
-					}					
+					}
 					_jobs_by_deadline.insert({ j.get_deadline(), &j });
 				}
 
@@ -118,6 +121,11 @@ namespace NP {
 			size_t num_jobs() const
 			{
 				return jobs.size();
+			}
+
+			size_t num_tasks() const
+			{
+				return tasks.size();
 			}
 
 			const Job_precedence_set& predecessors_of(const Job<Time>& j) const
@@ -158,7 +166,7 @@ namespace NP {
 			{
 				// If there is a single core, all predecessors of `j_high` must have finished when the core becomes available,
 				// since we assumed that all predecessors of `j_high` were already dispatched.
-				if (num_cpus == 1) 
+				if (num_cpus == 1)
 					return true;
 
 				// The optimization above can be generalized to multiple cores, using the following knowledge:
@@ -182,12 +190,12 @@ namespace NP {
 				//     which contradicts the condition that ft(j).min() <= ca(1).min().
 				Interval<Time> ft{ 0, 0 };
 				s.get_finish_times(j, ft);
-				if (ft.min() <= s.core_availability(1).min() && ft.max() <= s.core_availability(2).min()) 
+				if (ft.min() <= s.core_availability(1).min() && ft.max() <= s.core_availability(2).min())
 					return true;
 
 				// Alternatively, if we check that `ft(j).max() < ca(2).min()` (strictly smaller),
 				// we would already derive a contradiction at (E) since ca(2).min() <= ft(j).max() contradicts ft(j).max() < ca(2).min()
-				if (ft.max() < s.core_availability(2).min()) 
+				if (ft.max() < s.core_availability(2).min())
 					return true;
 
 				// If at least one successor of j has already been dispatched, then j must have finished already.
@@ -196,7 +204,7 @@ namespace NP {
 						return true;
 					}
 				}
-				
+
 				return false;
 			}
 
@@ -240,7 +248,7 @@ namespace NP {
 
 					// If the suspension is 0 and j_pred is certainly finished when j_low is dispatched, then j_pred cannot postpone
 					// the (latest) ready time of j_high.
-					if (high_suspension.max() == 0 && is_cert_finished(pred_idx, n, s)) 
+					if (high_suspension.max() == 0 && is_cert_finished(pred_idx, n, s))
 						continue;
 
 					// If j_pred is a predecessor of both j_high and j_low, we can disregard it if the maximum suspension from j_pred to j_high
@@ -253,7 +261,7 @@ namespace NP {
 					// - something else causes j_high to become ready later than j_low, so this constraint is not important
 					// Either way, this constraint can be disregarded.
 					bool can_disregard = false;
-					for (const auto &low_suspension : predecessors_suspensions[j_low]) {
+					for (const auto& low_suspension : predecessors_suspensions[j_low]) {
 						// Note that the condition `susp_max(j_pred -> j_high) <= susp_min(j_pred -> j_low)` will be true if and only if there
 						// exists a constraint from j_pred to j_low whose *minimum* suspension is at least `susp_max(j_pred -> j_high)`. So we can
 						// stop searching as soon as we find one such constraint.

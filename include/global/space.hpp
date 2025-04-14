@@ -39,7 +39,7 @@ namespace NP {
 		public:
 
 			typedef Scheduling_problem<Time> Problem;
-			typedef typename Scheduling_problem<Time>::Workload Workload;
+			typedef typename Scheduling_problem<Time>::Job_set Workload;
 			typedef typename Scheduling_problem<Time>::Precedence_constraints Precedence_constraints;
 			typedef typename Scheduling_problem<Time>::Abort_actions Abort_actions;
 			typedef Schedule_state<Time> State;
@@ -54,7 +54,7 @@ namespace NP {
 				if (opts.verbose)
 					std::cout << "Starting" << std::endl;
 
-				State_space* s = new State_space(prob.jobs, prob.prec, prob.aborts, prob.num_processors, 
+				State_space* s = new State_space(prob.jobs, prob.prec, prob.aborts, prob.num_processors,
 					{ opts.merge_conservative, opts.merge_use_job_finish_times, opts.merge_depth }, opts.timeout, opts.max_depth, opts.early_exit, opts.verbose);
 				s->be_naive = opts.be_naive;
 				if (opts.verbose)
@@ -263,8 +263,8 @@ namespace NP {
 			bool be_naive;
 
 			struct Merge_options {
-				bool conservative; 
-				bool use_finish_times; 
+				bool conservative;
+				bool use_finish_times;
 				int budget;
 			};
 			const Merge_options merge_opts;
@@ -306,7 +306,7 @@ namespace NP {
 				, aborted(false)
 				, timed_out(false)
 				, observed_deadline_miss(false)
-				, be_naive(false)		
+				, be_naive(false)
 				, timeout(max_cpu_time)
 				, max_depth(max_depth)
 				, merge_opts(merge_options)
@@ -393,7 +393,7 @@ namespace NP {
 
 			Nodes& nodes(const int depth = 0)
 			{
-				return nodes_storage[(current_job_count+ depth)% nodes_storage.size()];
+				return nodes_storage[(current_job_count + depth) % nodes_storage.size()];
 			}
 
 			template <typename... Args>
@@ -918,7 +918,7 @@ namespace NP {
 			{
 				int last_time;
 				unsigned int target_depth;
-				
+
 				if (verbose) {
 					std::cout << "0%";
 					last_time = get_cpu_time();
@@ -933,7 +933,7 @@ namespace NP {
 
 				while (current_job_count < state_space_data.num_jobs()) {
 					Nodes& exploration_front = nodes();
-					unsigned long n = 
+					unsigned long n =
 #ifdef CONFIG_PARALLEL
 						exploration_front.unsafe_size();
 #else
@@ -951,9 +951,9 @@ namespace NP {
 					last_num_states = num_states;
 
 					if (verbose) {
-						int time = get_cpu_time(); 
-						if (time > last_time+4) { // update progress information approxmately every 4 seconds of runtime
-							std::cout << "\r" << (int)(((double)current_job_count / target_depth) * 100) << "% (" << current_job_count <<"/"<< target_depth<<")";
+						int time = get_cpu_time();
+						if (time > last_time + 4) { // update progress information approxmately every 4 seconds of runtime
+							std::cout << "\r" << (int)(((double)current_job_count / target_depth) * 100) << "% (" << current_job_count << "/" << target_depth << ")";
 							last_time = time;
 						}
 					}
@@ -966,9 +966,9 @@ namespace NP {
 #ifdef CONFIG_PARALLEL
 					Node_ref node;
 					while (exploration_front.try_pop(node)) {
-						tg.run([=] { 
+						tg.run([=] {
 							//node->consolidate(merge_opts.conservative, merge_opts.use_finish_times, merge_opts.budget);
-							explore(*node); 
+							explore(*node);
 #ifndef CONFIG_COLLECT_SCHEDULE_GRAPH
 							// If we don't need to collect all nodes, we can remove
 							// all those that we are done with, which saves a lot of
@@ -979,7 +979,7 @@ namespace NP {
 							}
 							release_node(node);
 #endif
-						});
+							});
 					}
 					tg.wait();
 
@@ -994,10 +994,10 @@ namespace NP {
 						// all those that we are done with, which saves a lot of
 						// memory.
 						auto states = n->get_states();
-						for (auto s = states->begin(); s != states->end(); s++ ) {
-							release_state(*s); 
+						for (auto s = states->begin(); s != states->end(); s++) {
+							release_state(*s);
 						}
-						release_node(n); 
+						release_node(n);
 #endif
 					}
 #endif
@@ -1100,12 +1100,12 @@ namespace NP {
 				}
 				out << "}" << std::endl;
 				return out;
-					}
-#endif
-				};
-
 			}
-		}
+#endif
+		};
+
+	}
+}
 
 namespace std
 {

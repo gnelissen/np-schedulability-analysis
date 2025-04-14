@@ -34,6 +34,21 @@ namespace NP {
 	    Subtask_index index; // index in the set of subtasks of the task
 	    Task_index task;
 
+		hash_value_t key;
+
+		void compute_hash() {
+			auto h = std::hash<Time>{};
+			//RV: added index to the hash key, which seems to prevent collisions in state/node lookup keys.
+			key = h(index);
+			key = (key << 4) ^ h(release_offset.from());
+			key = (key << 4) ^ h(task);
+			key = (key << 4) ^ h(release_offset.until());
+			key = (key << 4) ^ h(exec_time.begin()->second.from());
+			key = (key << 4) ^ h(deadline);
+			key = (key << 4) ^ h(exec_time.begin()->second.upto());
+			key = (key << 4) ^ h(priority);
+		}
+
 	   public:
 	    Subtask(Interval<Time> rel_offset, const Exec_times& costs, Time dl,
 	         Priority prio, Task_index tsk, Subtask_index idx)
@@ -45,6 +60,7 @@ namespace NP {
 	          index(idx),
 	          task(tsk)
 		{
+			compute_hash();
 	    }
 
 	    Subtask(Interval<Time> rel_offset, Interval<Time> cost, Time dl, Priority prio,
@@ -57,7 +73,13 @@ namespace NP {
 	          task(tsk)
 		{
 		    exec_time.emplace(1, cost);
+			compute_hash();
 	    }
+
+		hash_value_t get_key() const
+		{
+			return key;
+		}
 
 	    Time smallest_offset() const {
 		    return release_offset.min();
@@ -255,9 +277,9 @@ namespace NP {
 		    key = (key << 4) ^ h(inter_arrival.from());
 		    key = (key << 4) ^ h(index);
 		    key = (key << 4) ^ h(inter_arrival.until());
-			key = (key << 4) ^ h(exec_time.begin()->second.from());
+			key = (key << 4) ^ h(release_offset.from());
 			key = (key << 4) ^ h(deadline);
-			key = (key << 4) ^ h(exec_time.begin()->second.upto());
+			key = (key << 4) ^ h(release_offset.upto());
 		    key = (key << 4) ^ h(release_jitter);
 		}
 

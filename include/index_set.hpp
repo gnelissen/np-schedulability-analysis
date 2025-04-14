@@ -25,15 +25,6 @@ namespace NP {
 				set_bit(idx, true);
 			}
 
-			// derive a new set by "cloning" an existing set and adding an index
-			void set(const Index_set& from, std::size_t idx)
-			{
-				the_set.clear();
-				the_set.resize(std::max(from.the_set.size(), (idx / 64) + 1));
-				std::copy(from.the_set.begin(), from.the_set.end(), the_set.begin());
-				set_bit(idx, true);
-			}
-
 			// create the diff of two job sets (intended for debugging only)
 			Index_set(const Index_set &a, const Index_set &b)
 					: the_set(std::max(a.the_set.size(), b.the_set.size()), 0)
@@ -41,6 +32,11 @@ namespace NP {
 				auto limit = std::min(a.the_set.size(), b.the_set.size());
 				for (std::size_t i = 0; i < limit; ++i)
 					the_set[i] = a.the_set[i] & ~b.the_set[i];
+			}
+
+			Index_set(const Index_set& other)
+			{
+				the_set = other.the_set;
 			}
 
 			Index_set& operator=(const Index_set& other)
@@ -59,6 +55,15 @@ namespace NP {
 			bool operator!=(const Index_set &other) const
 			{
 				return the_set != other.the_set;
+			}
+
+			// derive a new set by "cloning" an existing set and adding an index
+			void set(const Index_set& from, std::size_t idx)
+			{
+				the_set.clear();
+				the_set.resize(std::max(from.the_set.size(), (idx / 64) + 1));
+				std::copy(from.the_set.begin(), from.the_set.end(), the_set.begin());
+				set_bit(idx, true);
 			}
 
 			bool contains(std::size_t idx) const
@@ -111,6 +116,12 @@ namespace NP {
 				the_set.clear();
 			}
 
+			void reset()
+			{
+				for(int i=0; i++; i<the_set.size())
+					the_set[i] = 0;
+			}
+
 			friend std::ostream& operator<< (std::ostream& stream,
 			                                 const Index_set& s)
 			{
@@ -151,9 +162,6 @@ namespace NP {
 				std::size_t bit_index = idx % 64;
 				return the_set[byte_index] & (((uint64_t)1) << bit_index);
 			}
-
-			// no accidental copies
-			Index_set(const Index_set& origin) = delete;
 		};
 }
 
