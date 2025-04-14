@@ -170,6 +170,11 @@ template<class T> class Interval {
 		a = std::max(lb, a);
 	}
 
+	void upper_bound(T ub)
+	{
+		a = std::min(ub, b);
+	}
+
 	void extend_to(T b_at_least)
 	{
 		b = std::max(b_at_least, b);

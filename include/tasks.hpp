@@ -81,13 +81,9 @@ namespace NP {
 			return key;
 		}
 
-	    Time smallest_offset() const {
-		    return release_offset.min();
-	    }
-
-	    Time longest_offset() const {
-		    return release_offset.max();
-	    }
+		Interval<Time> get_release_offset() const {
+			return release_offset;
+		}
 
 		Time get_deadline() const {
 		    return deadline;
@@ -229,6 +225,21 @@ namespace NP {
 			    cstr.delay = delay;
 				exclusions.push_back(cstr);
 		    }
+
+			bool contains(Subtask_index id) {
+				for (const auto& s : start_after_start) {
+					if (s.subtask->id() == id)
+						return true;
+				}
+				for (const auto& s : start_after_finish) {
+					if (s.subtask->id() == id)
+						return true;
+				}
+				for (const auto& s : exclusions) {
+					if (s.subtask->id() == id)
+						return true;
+				}
+			}
 		};
 	    struct Predecessors {
 		    std::vector<Precedence_cstr> start_before_start; // set of jobs that must start before j starts
@@ -255,6 +266,21 @@ namespace NP {
 			    cstr.delay = delay;
 			    exclusions.push_back(cstr);
 		    }
+
+			bool contains(Subtask_index id) {
+				for (const auto& s : start_before_start) {
+					if (s.subtask->id() == id)
+						return true;
+				}
+				for (const auto& s : finish_before_start) {
+					if (s.subtask->id() == id)
+						return true;
+				}
+				for (const auto& s : exclusions) {
+					if (s.subtask->id() == id)
+						return true;
+				}
+			}
 	    };
 		
 	private:
@@ -306,20 +332,6 @@ namespace NP {
 			return key;
 		}
 
-		Time earliest_next_arrival(Time last_arrival) const
-		{
-		    return last_arrival + inter_arrival.min();
-		}
-
-		Time latest_next_arrival(Time last_arrival) const
-		{
-		    return last_arrival + inter_arrival.max();
-		}
-
-		Time latest_next_release(Time last_arrival) const {
-		    return last_arrival + inter_arrival.max() + release_jitter;
-	    }
-
 		Priority get_priority() const
 		{
 			return priority;
@@ -342,9 +354,28 @@ namespace NP {
 			return index;
 		}
 
+		Interval<Time> get_release_offset() const
+		{
+			return release_offset;
+		}
+
+		Interval<Time> get_inter_arrival() const
+		{
+			return inter_arrival;
+		}
+
+		Time get_release_jitter() const
+		{
+			return release_jitter;
+		}
+
 		const std::vector<Subtask_ref>& get_subtasks() const {
 		    return subtasks;
 	    }
+
+		size_t num_subtasks() const {
+			return subtasks.size();
+		}
 
 		Subtask_ref get_subtask(Subtask_index i) const {
 		    assert(i < subtasks.size());

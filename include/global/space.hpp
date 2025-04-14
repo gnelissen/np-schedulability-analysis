@@ -226,6 +226,7 @@ namespace NP {
 			typedef std::unordered_map<hash_value_t, Node_refs> Nodes_map;
 #endif
 			typedef const Job<Time>* Job_ref;
+			typedef const Subtask<Time>* Subtask_ref;
 
 			// Similar to uni/space.hpp, make Response_times a vector of intervals.
 
@@ -562,7 +563,7 @@ namespace NP {
 			// Check if any job is guaranteed to miss its deadline in any state in node new_n
 			void check_for_deadline_misses(const Node& old_n, const Node& new_n)
 			{
-				auto check_from = old_n.get_first_state()->core_availability().min();
+				/*auto check_from = old_n.get_first_state()->core_availability().min();
 
 				// check if we skipped any jobs that are now guaranteed
 				// to miss their deadline
@@ -607,7 +608,7 @@ namespace NP {
 					else
 						// deadlines now after the next earliest finish time
 						break;
-				}
+				}*/
 			}
 
 			bool all_jobs_scheduled(const Node& n)
@@ -682,13 +683,13 @@ namespace NP {
 				}
 			}
 
-			bool dispatch(const Node& n, const Job<Time>& j, Time t_wc_wos, Time t_high_wos)
+			bool dispatch(const Node& n, Subtask_ref j)
 			{
 				// All states in node 'n' for which the job 'j' is eligible will 
 				// be added to that same node. 
 				// If such a node already exists, we keep a reference to it
 				Node_ref next = nullptr;
-				DM("--- global:dispatch() " << n << ", " << j << ", " << t_wc_wos << ", " << t_high_wos << std::endl);
+				DM("--- global:dispatch() " << n << ", " << *j <<  std::endl);
 
 				bool dispatched_one = false;
 
@@ -699,32 +700,32 @@ namespace NP {
 				{
 					// if the job priority is lower than than the minimum priority of the next dispatched job, it will not be dispatched next
 					// (remember that lower number means higher priority)
-					Job_ref next_dispatch_min_prio = s->get_next_dispatched_job_min_priority();
-					if (next_dispatch_min_prio != NULL && next_dispatch_min_prio->higher_priority_than(j))
+					Subtask_ref next_dispatch_min_prio = s->get_next_dispatched_job_min_priority();
+					if (next_dispatch_min_prio != NULL && next_dispatch_min_prio->higher_priority_than(*j))
 						continue;
 
-					const auto& costs = j.get_all_costs();
+					const auto& costs = j->get_all_costs();
 					// check for all possible parallelism levels of the moldable gang job j (if j is not gang or not moldable than min_paralellism = max_parallelism and costs only constains a single element).
 					//for (unsigned int p = j.get_max_parallelism(); p >= j.get_min_parallelism(); p--)
 					for (auto it = costs.rbegin(); it != costs.rend(); it++)
 					{
-						unsigned int p = it->first;
+						/*unsigned int p = it->first;
 						// Calculate t_wc and t_high
 						Time t_wc = std::max(s->core_availability().max(), next_certain_job_ready_time(n, *s));
 
-						Time t_high_succ = state_space_data.next_certain_higher_priority_successor_job_ready_time(n, *s, j, p);
-						Time t_high_gang = state_space_data.next_certain_higher_priority_gang_source_job_ready_time(n, *s, j, p, t_wc + 1);
+						Time t_high_succ = state_space_data.next_certain_higher_priority_successor_job_ready_time(n, *s, *j, p);
+						Time t_high_gang = state_space_data.next_certain_higher_priority_gang_source_job_ready_time(n, *s, *j, p, t_wc + 1);
 						Time t_high = std::min(t_high_wos, std::min(t_high_gang, t_high_succ));
 
 						// If j can execute on ncores+k cores, then 
 						// the scheduler will start j on ncores only if 
 						// there isn't ncores+k cores available
 						Time t_avail = Time_model::constants<Time>::infinity();
-						if (p < j.get_max_parallelism())
+						if (p < j->get_max_parallelism())
 							t_avail = s->core_availability(std::prev(it)->first).max();
 
 						DM("=== t_high = " << t_high << ", t_wc = " << t_wc << std::endl);
-						auto _st = start_times(*s, j, t_wc, t_high, t_avail, p);
+						auto _st = start_times(*s, *j, t_wc, t_high, t_avail, p);
 						if (_st.first > t_wc || _st.first >= t_high || _st.first >= t_avail)
 							continue; // nope, not next job that can be dispatched in state s, try the next state.
 
@@ -734,13 +735,13 @@ namespace NP {
 						Time lft = _st.second + exec_time.max();
 
 						// check for possible abort actions
-						Interval<Time> ftimes = calculate_abort_time(j, _st.first, _st.second, eft, lft);
+						Interval<Time> ftimes = calculate_abort_time(*j, _st.first, _st.second, eft, lft);
 
 						// yep, job j is a feasible successor in state s
 						dispatched_one = true;
 
 						// update finish-time estimates
-						update_finish_times(j, ftimes);
+						update_finish_times(*j, ftimes);
 
 #ifdef CONFIG_PARALLEL
 						// if we do not have a pointer to a node with the same set of scheduled jobs yet,
@@ -802,7 +803,7 @@ namespace NP {
 						// next should always exist at this point, possibly without states in it
 						// create a new state resulting from scheduling j in state s on p cores and try to merge it with an existing state in node 'next'.							
 						new_or_merge_state(*next, *s, j.get_job_index(),
-							Interval<Time>{_st}, ftimes, next->get_scheduled_jobs(), next->get_jobs_with_pending_successors(), next->get_ready_successor_jobs(), state_space_data, next->get_next_certain_source_job_release(), p);
+							Interval<Time>{_st}, ftimes, next->get_scheduled_jobs(), next->get_jobs_with_pending_successors(), next->get_ready_successor_jobs(), state_space_data, next->get_next_certain_source_job_release(), p);*/
 
 #ifndef CONFIG_PARALLEL
 						// make sure we didn't skip any jobs which would then certainly miss its deadline
@@ -835,68 +836,16 @@ namespace NP {
 				bool found_one = false;
 
 				DM("---- global:explore(node)" << n.finish_range() << std::endl);
-
-				// (0) define the window of interest
-				auto t_min = n.earliest_job_release();
-				// latest time some unfinished job is certainly ready
-				auto nxt_ready_job = n.next_certain_job_ready_time();
-				// latest time all cores are certainly available
-				auto avail_max = n.latest_core_availability();
-				// latest time by which a work-conserving scheduler
-				// certainly schedules some job
-				auto upbnd_t_wc = std::max(avail_max, nxt_ready_job);
-
 				DM(n << std::endl);
-				DM("t_min: " << t_min << std::endl
-					<< "nxt_ready_job: " << nxt_ready_job << std::endl
-					<< "avail_max: " << avail_max << std::endl
-					<< "upbnd_t_wc: " << upbnd_t_wc << std::endl);
 
-				//check all jobs that may be eligible to be dispatched next
-				// part 1: check source jobs (i.e., jobs without precedence constraints) that are potentially eligible
-				for (auto it = state_space_data.jobs_by_earliest_arrival.lower_bound(t_min);
-					it != state_space_data.jobs_by_earliest_arrival.end();
-					it++)
+				// check ready jobs (i.e., jobs with precedence constraints that are completed) that are potentially eligible
+				const auto& ready_subtasks = n.get_ready_subtasks();
+				for (const auto& t : ready_subtasks)
 				{
-					const Job<Time>& j = *it->second;
-					DM(j << " (" << j.get_job_index() << ")" << std::endl);
-					// stop looking once we've left the window of interest
-					if (j.earliest_arrival() > upbnd_t_wc)
-						break;
-
-					// if it was dispatched already, it will not be dispatched again
-					if (!unfinished(n, j))
-						continue;
-
-					Time t_high_wos = state_space_data.next_certain_higher_priority_seq_source_job_release(n, j, upbnd_t_wc + 1);
-					// if there is a higher priority job that is certainly ready before job j is released at the earliest, 
-					// then j will never be the next job dispached by the scheduler
-					if (t_high_wos <= j.earliest_arrival())
-						continue;
-					found_one |= dispatch(n, j, upbnd_t_wc, t_high_wos);
-				}
-				// part 2: check ready successor jobs (i.e., jobs with precedence constraints that are completed) that are potentially eligible
-				for (auto it = n.get_ready_successor_jobs().begin();
-					it != n.get_ready_successor_jobs().end();
-					it++)
-				{
-					const Job<Time>& j = **it;
-					DM(j << " (" << j.get_job_index() << ")" << std::endl);
-
-					// don't look outside the window of interest
-					if (j.earliest_arrival() > upbnd_t_wc)
-						continue;
-
-					// Since this job is is recorded as ready in the state, it better
-					// be incomplete...
-					assert(unfinished(n, j));
-
-					Time t_high_wos = state_space_data.next_certain_higher_priority_seq_source_job_release(n, j, upbnd_t_wc + 1);
-					// if there is a higher priority job that is certainly ready before job j is released at the earliest, 
-					// then j will never be the next job dispached by the scheduler
-					if (t_high_wos <= j.earliest_arrival())
-						continue;
-					found_one |= dispatch(n, j, upbnd_t_wc, t_high_wos);
+					for (Subtask_ref j : t) {
+						DM(*j << " (" << j->task_id() << "," << j->id() << ")" << std::endl);
+						found_one |= dispatch(n, j);
+					}
 				}
 
 				// check for a dead end
