@@ -137,6 +137,13 @@ template<class T> class Interval {
 		return {a + other.first, b + other.second};
 	}
 
+	Interval<T>& operator+=(const Interval<T>& other)
+	{
+		a += other.a;
+		b += other.b;
+		return *this;
+	}
+
 	Interval<T> merge(const Interval<T>& other) const
 	{
 		return Interval<T>{std::min(from(), other.from()),

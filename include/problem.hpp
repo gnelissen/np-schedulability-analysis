@@ -12,17 +12,13 @@ namespace NP {
 	template<class Time>
 	struct Scheduling_problem {
 
-		typedef typename Job<Time>::Job_set Job_set;
-	    typedef typename Task<Time>::Task_set Task_set;
+		typedef typename Task<Time>::Task_set Task_set;
 		typedef typename std::vector<Abort_action<Time>> Abort_actions;
 		typedef typename std::vector<Precedence_constraint<Time>> Precedence_constraints;
 
 		// ** Description of the workload:
-		// (1) a set of jobs and recurrent tasks
-		Job_set jobs;
+		// (1) a set of recurrent tasks
 	    Task_set tasks;
-		// (2) a set of precedence constraints among the jobs
-		Precedence_constraints prec;
 		// (3) abort actions for (some of) the jobs
 		Abort_actions aborts;
 
@@ -32,41 +28,22 @@ namespace NP {
 		unsigned int num_processors;
 
 		// Classic default setup: no abort actions
-		Scheduling_problem(const Task_set& tasks, const Job_set& jobs, const Precedence_constraints& prec,
-		                   unsigned int num_processors = 1)
+		Scheduling_problem(const Task_set& tasks, unsigned int num_processors = 1)
 		: num_processors(num_processors)
 		, tasks(tasks)
-		, jobs(jobs)
-		, prec(prec)
 		{
 			assert(num_processors > 0);
-			validate_prec_cstrnts<Time>(this->prec, jobs);
 		}
 
 		// Constructor with abort actions and precedence constraints
-	    Scheduling_problem(const Task_set& tasks, const Job_set& jobs,
-	                       const Precedence_constraints& prec,
-		                   const Abort_actions& aborts,
+	    Scheduling_problem(const Task_set& tasks, const Abort_actions& aborts,
 		                   unsigned int num_processors)
 		: num_processors(num_processors)
 		, tasks(tasks)
-		, jobs(jobs)
-		, prec(prec)
 		, aborts(aborts)
 		{
 			assert(num_processors > 0);
-			validate_prec_cstrnts<Time>(this->prec, jobs);
-			validate_abort_refs<Time>(aborts, jobs);
-		}
-
-		// Convenience constructor: no DAG, no abort actions
-	    Scheduling_problem(const Task_set& tasks, const Job_set& jobs,
-		                   unsigned int num_processors = 1)
-		: tasks(tasks)
-		, jobs(jobs)
-		, num_processors(num_processors)
-		{
-			assert(num_processors > 0);
+			//validate_abort_refs<Time>(aborts, tasks);
 		}
 	};
 
@@ -80,6 +57,9 @@ namespace NP {
 		// schedule graph) should we terminate the analysis?
 		// Zero means unlimited.
 		unsigned int max_depth;
+
+		// length of the observation window analyzed by the tool
+		unsigned int l_obs_window; 
 
 		// Should we terminate the analysis upon encountering the first
 		// deadline miss?

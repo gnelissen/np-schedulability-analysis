@@ -39,7 +39,7 @@ namespace NP {
 		public:
 
 			typedef Scheduling_problem<Time> Problem;
-			typedef typename Scheduling_problem<Time>::Job_set Workload;
+			typedef typename Scheduling_problem<Time>::Task_set Task_set;
 			typedef typename Scheduling_problem<Time>::Precedence_constraints Precedence_constraints;
 			typedef typename Scheduling_problem<Time>::Abort_actions Abort_actions;
 			typedef Schedule_state<Time> State;
@@ -54,8 +54,8 @@ namespace NP {
 				if (opts.verbose)
 					std::cout << "Starting" << std::endl;
 
-				State_space* s = new State_space(prob.jobs, prob.prec, prob.aborts, prob.num_processors,
-					{ opts.merge_conservative, opts.merge_use_job_finish_times, opts.merge_depth }, opts.timeout, opts.max_depth, opts.early_exit, opts.verbose);
+				State_space* s = new State_space(prob.tasks, prob.aborts, prob.num_processors,
+					{ opts.merge_conservative, opts.merge_use_job_finish_times, opts.merge_depth }, opts.l_obs_window, opts.max_depth, opts.timeout, opts.early_exit, opts.verbose);
 				s->be_naive = opts.be_naive;
 				if (opts.verbose)
 					std::cout << "Analysing" << std::endl;
@@ -67,10 +67,10 @@ namespace NP {
 
 			// convenience interface for tests
 			static State_space* explore_naively(
-				const Workload& jobs,
+				const Task_set& tasks,
 				unsigned int num_cpus = 1)
 			{
-				Problem p{ jobs, num_cpus };
+				Problem p{ tasks, num_cpus };
 				Analysis_options o;
 				o.be_naive = true;
 				return explore(p, o);
@@ -78,24 +78,24 @@ namespace NP {
 
 			// convenience interface for tests
 			static State_space* explore(
-				const Workload& jobs,
+				const Task_set& tasks,
 				unsigned int num_cpus = 1)
 			{
-				Problem p{ jobs, num_cpus };
+				Problem p{ tasks, num_cpus };
 				Analysis_options o;
 				return explore(p, o);
 			}
 
 			// return the BCRT and WCRT of job j 
-			Interval<Time> get_finish_times(const Job<Time>& j) const
+			Interval<Time> get_resp_times(const Subtask<Time>& j) const
 			{
-				return get_finish_times(j.get_job_index());
+				return get_resp_times(j.task_id(), j.id());
 			}
 
-			Interval<Time> get_finish_times(Job_index j) const
+			Interval<Time> get_resp_times(Task_index t, Subtask_index j) const
 			{
-				if (rta[j].valid) {
-					return rta[j].rt;
+				if (rta[t][j].valid) {
+					return rta[t][j].rt;
 				}
 				else {
 					return Interval<Time>{0, Time_model::constants<Time>::infinity()};
@@ -241,7 +241,7 @@ namespace NP {
 				{
 				}
 			};
-			typedef std::vector<Response_time_item> Response_times;
+			typedef std::vector<std::vector<Response_time_item>> Response_times;
 
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 			std::deque<Edge> edges;
@@ -260,6 +260,7 @@ namespace NP {
 			bool early_exit;
 
 			const unsigned int max_depth;
+			const Time length_obs_window;
 
 			bool be_naive;
 
@@ -294,21 +295,22 @@ namespace NP {
 
 			State_space_data<Time> state_space_data;
 
-			State_space(const Workload& jobs,
-				const Precedence_constraints& edges,
+			State_space(const Task_set& tasks,
 				const Abort_actions& aborts,
 				unsigned int num_cpus,
 				Merge_options merge_options,
-				double max_cpu_time = 0,
-				unsigned int max_depth = 0,
+				unsigned int l_obs_window,
+				unsigned int max_depth,
+				double max_cpu_time = 0,				
 				bool early_exit = true,
 				bool verbose = false)
-				: state_space_data(jobs, edges, aborts, num_cpus)
+				: state_space_data(tasks, aborts, num_cpus)
 				, aborted(false)
 				, timed_out(false)
 				, observed_deadline_miss(false)
 				, be_naive(false)
 				, timeout(max_cpu_time)
+				, length_obs_window(l_obs_window)
 				, max_depth(max_depth)
 				, merge_opts(merge_options)
 				, verbose(verbose)
@@ -316,20 +318,18 @@ namespace NP {
 				, num_states(0)
 				, num_edges(0)
 				, max_width(0)
-				, width(jobs.size(), { 0,0 })
-				, rta(jobs.size())
+				, rta(tasks.size())
 				, current_job_count(0)
 				, num_cpus(num_cpus)
 				, early_exit(early_exit)
-#ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
-				, nodes_storage(jobs.size() + 1)
-#else
 				, nodes_storage(2)
-#endif
 #ifdef CONFIG_PARALLEL
-				, partial_rta(jobs.size())
+				, partial_rta(tasks.size())
 #endif
 			{
+				width.reserve(max_depth);
+				for (int i = 0; i < tasks.size(); i++)
+					rta[i].resize(tasks[i].num_subtasks());
 			}
 
 		private:
@@ -343,32 +343,31 @@ namespace NP {
 #endif
 			}
 
-			void update_finish_times(Response_times& r, const Job_index id,
+			void update_response_times(Response_times& r, const Task_index t, const Subtask_index s,
 				Interval<Time> range)
 			{
-				if (!r[id].valid) {
-					r[id].valid = true;
-					r[id].rt = range;
+				if (!r[t][s].valid) {
+					r[t][s].valid = true;
+					r[t][s].rt = range;
 				}
 				else {
-					r[id].rt |= range;
+					r[t][s].rt |= range;
 				}
-				DM("RTA " << id << ": " << r[id].rt << std::endl);
+				DM("RTA " << t << "," << s << ": " << r[t][s].rt << std::endl);
 			}
 
-			void update_finish_times(
-				Response_times& r, const Job<Time>& j, Interval<Time> range)
+			void update_response_times(
+				const State& s, Response_times& r, const Subtask<Time>& j, Interval<Time> resp_time)
 			{
-				update_finish_times(r, j.get_job_index(), range);
-				if (j.exceeds_deadline(range.upto())) {
+				update_response_times(r, j.task_id(), j.id(), resp_time);
+				if (resp_time.max() > j.get_deadline()) {
 					observed_deadline_miss = true;
-
 					if (early_exit)
 						aborted = true;
 				}
 			}
 
-			void update_finish_times(const Job<Time>& j, Interval<Time> range)
+			void update_response_times(const State& s, const Subtask<Time>& j, Interval<Time> resp_time)
 			{
 				Response_times& r =
 #ifdef CONFIG_PARALLEL
@@ -376,7 +375,7 @@ namespace NP {
 #else
 					rta;
 #endif
-				update_finish_times(r, j, range);
+				update_response_times(s, r, j, resp_time);
 			}
 
 			void make_initial_node(unsigned num_cores)
@@ -408,8 +407,8 @@ namespace NP {
 #endif // CONFIG_PARALLEL
 
 				// make sure we didn't screw up...
-				auto njobs = n->number_of_scheduled_jobs();
-				/*assert(
+				/*auto njobs = n->number_of_scheduled_jobs();
+				assert(
 					(!njobs && num_states == 0) // initial state
 					|| (njobs == current_job_count + 1) // normal State
 					|| (njobs == current_job_count + 2 && aborted) // deadline miss
@@ -596,7 +595,7 @@ namespace NP {
 #endif
 
 								// update response times
-								update_finish_times(j, frange);
+								update_response_times(j, frange);
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 								edges.emplace_back(&j, &new_n, &next, frange, pmin);
 #endif
@@ -613,22 +612,14 @@ namespace NP {
 
 			bool all_jobs_scheduled(const Node& n)
 			{
-				return (n.number_of_scheduled_jobs() == state_space_data.num_jobs());
-			}
-
-			// find next time by which a job is certainly ready in system state 's'
-			Time next_certain_job_ready_time(const Node& n, const State& s) const
-			{
-				Time t_ws = std::min(s.next_certain_gang_source_job_disptach(), s.next_certain_successor_jobs_disptach());
-				Time t_wos = n.get_next_certain_sequential_source_job_release();
-				return std::min(t_wos, t_ws);
+				return n.finish_range().from() >= length_obs_window;
 			}
 
 			// assumes j is ready
 			// NOTE: we don't use Interval<Time> here because the
 			//       Interval c'tor sorts its arguments.
 			std::pair<Time, Time> start_times(
-				const State& s, const Job<Time>& j, const Time t_wc, const Time t_high,
+				const State& s, const Subtask<Time>& j, const Time t_wc, const Time t_high,
 				const Time t_avail, const unsigned int ncores = 1) const
 			{
 				auto rt = state_space_data.earliest_ready_time(s, j);
@@ -704,18 +695,20 @@ namespace NP {
 					if (next_dispatch_min_prio != NULL && next_dispatch_min_prio->higher_priority_than(*j))
 						continue;
 
+					Time t_wc = s->next_certain_job_disptach();
+					// if something is certainly dispatched before j is released then j cannot be the next subtask dispatched
+					Interval<Time> arr = s->get_release_times(j->task_id(), j->id());
+					if (arr.min() > t_wc)
+						continue;
+
 					const auto& costs = j->get_all_costs();
 					// check for all possible parallelism levels of the moldable gang job j (if j is not gang or not moldable than min_paralellism = max_parallelism and costs only constains a single element).
 					//for (unsigned int p = j.get_max_parallelism(); p >= j.get_min_parallelism(); p--)
 					for (auto it = costs.rbegin(); it != costs.rend(); it++)
 					{
-						/*unsigned int p = it->first;
-						// Calculate t_wc and t_high
-						Time t_wc = std::max(s->core_availability().max(), next_certain_job_ready_time(n, *s));
-
-						Time t_high_succ = state_space_data.next_certain_higher_priority_successor_job_ready_time(n, *s, *j, p);
-						Time t_high_gang = state_space_data.next_certain_higher_priority_gang_source_job_ready_time(n, *s, *j, p, t_wc + 1);
-						Time t_high = std::min(t_high_wos, std::min(t_high_gang, t_high_succ));
+						unsigned int p = it->first;
+						// Calculate t_high
+						Time t_high = state_space_data.next_certain_higher_priority_job_ready_time(n, *s, *j, p);
 
 						// If j can execute on ncores+k cores, then 
 						// the scheduler will start j on ncores only if 
@@ -735,18 +728,23 @@ namespace NP {
 						Time lft = _st.second + exec_time.max();
 
 						// check for possible abort actions
-						Interval<Time> ftimes = calculate_abort_time(*j, _st.first, _st.second, eft, lft);
+						//Interval<Time> ftimes = calculate_abort_time(*j, _st.first, _st.second, eft, lft);
 
 						// yep, job j is a feasible successor in state s
 						dispatched_one = true;
 
-						// update finish-time estimates
-						update_finish_times(*j, ftimes);
-
+						// update response-time estimates
+						Time rel_jitter = state_space_data.tasks[j->task_id()].get_release_jitter();
+						// the response time is lower bounded by the best-case execution time, and 
+						// the earliest finish time minus latest arrival time, which is itself bounded by the latest start time 
+						Time bcrt = std::max(exec_time.min(), eft - std::min(arr.max() - rel_jitter, _st.second));
+						Interval<Time> resp_time(bcrt, lft - arr.min());
+						update_response_times(*s, *j, resp_time); 
+						
 #ifdef CONFIG_PARALLEL
 						// if we do not have a pointer to a node with the same set of scheduled jobs yet,
 						// try to find an existing node with the same set of scheduled jobs. Otherwise, create one.
-						if (next == nullptr)
+						/*if (next == nullptr)
 						{
 							Nodes_map_accessor acc;
 							auto next_key = n.next_key(j);
@@ -773,37 +771,41 @@ namespace NP {
 								}
 								// if we raced with concurrent creation, try again
 							}
-						}
+						}*/
 #else
 						// If be_naive, a new node and a new state should be created for each new job dispatch.
 						if (be_naive)
-							next = &(new_node(1, n, j, j.get_job_index(), state_space_data, state_space_data.earliest_possible_job_release(n, j), state_space_data.earliest_certain_source_job_release(n, j), state_space_data.earliest_certain_sequential_source_job_release(n, j)));
+							next = &(new_node(1, n, *j, state_space_data));
 
 						// if we do not have a pointer to a node with the same set of scheduled job yet,
 						// try to find an existing node with the same set of scheduled jobs. Otherwise, create one.
 						if (next == nullptr)
 						{
-							const auto pair_it = nodes_by_key.find(n.next_key(j));
+							bool new_n = true;
+							next = node_pool.acquire(n, *j, state_space_data);// &(new_node(1, n, *j, state_space_data));
+							const auto pair_it = nodes_by_key.find(next->get_key());
 							if (pair_it != nodes_by_key.end()) {
-								Job_set new_sched_jobs{ n.get_scheduled_jobs(), j.get_job_index() };
 								for (Node_ref other : pair_it->second) {
-									if (other->get_scheduled_jobs() == new_sched_jobs)
+									if (other->matches(*next))
 									{
+										release_node(next);
 										next = other;
+										new_n = false;
 										DM("=== dispatch: next exists." << std::endl);
 										break;
 									}
 								}
 							}
-							// If there is no node yet, create one.
-							if (next == nullptr)
-								next = &(new_node(1, n, j, j.get_job_index(), state_space_data, state_space_data.earliest_possible_job_release(n, j), state_space_data.earliest_certain_source_job_release(n, j), state_space_data.earliest_certain_sequential_source_job_release(n, j)));
+							if (new_n) {
+								nodes(1).push_back(next);
+								cache_node(next);
+							}
 						}
 #endif
 						// next should always exist at this point, possibly without states in it
 						// create a new state resulting from scheduling j in state s on p cores and try to merge it with an existing state in node 'next'.							
-						new_or_merge_state(*next, *s, j.get_job_index(),
-							Interval<Time>{_st}, ftimes, next->get_scheduled_jobs(), next->get_jobs_with_pending_successors(), next->get_ready_successor_jobs(), state_space_data, next->get_next_certain_source_job_release(), p);*/
+						new_or_merge_state(*next, *s, *j,
+							Interval<Time>{_st}, Interval<Time>{eft, lft}, next->get_scheduled_subtasks(), next->get_ready_subtasks(), state_space_data, p);
 
 #ifndef CONFIG_PARALLEL
 						// make sure we didn't skip any jobs which would then certainly miss its deadline
@@ -866,12 +868,10 @@ namespace NP {
 			void explore()
 			{
 				int last_time;
-				unsigned int target_depth;
 
 				if (verbose) {
 					std::cout << "0%";
 					last_time = get_cpu_time();
-					target_depth = std::max((unsigned int)state_space_data.num_jobs(), max_depth);
 				}
 
 				int last_num_states = 0;
@@ -880,7 +880,7 @@ namespace NP {
 				tbb::task_group tg;
 #endif
 
-				while (current_job_count < state_space_data.num_jobs()) {
+				while (true) {
 					Nodes& exploration_front = nodes();
 					unsigned long n =
 #ifdef CONFIG_PARALLEL
@@ -889,20 +889,17 @@ namespace NP {
 						exploration_front.size();
 #endif
 					if (n == 0)
-					{
-						aborted = true;
 						break;
-					}
 
 					// keep track of exploration front width
 					max_width = std::max(max_width, n);
-					width[current_job_count] = { n, num_states - last_num_states };
+					width.emplace_back( n, num_states - last_num_states );
 					last_num_states = num_states;
 
 					if (verbose) {
 						int time = get_cpu_time();
 						if (time > last_time + 4) { // update progress information approxmately every 4 seconds of runtime
-							std::cout << "\r" << (int)(((double)current_job_count / target_depth) * 100) << "% (" << current_job_count << "/" << target_depth << ")";
+							std::cout << "\r" << (int)(((double)current_job_count / max_depth) * 100) << "% (" << current_job_count << "/" << max_depth << ")";
 							last_time = time;
 						}
 					}
@@ -934,7 +931,8 @@ namespace NP {
 
 #else
 					for (Node_ref n : exploration_front) {
-						explore(*n);
+						if (n->finish_range().from() < length_obs_window)
+							explore(*n);
 						check_cpu_timeout();
 						if (aborted)
 							break;

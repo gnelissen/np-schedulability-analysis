@@ -38,12 +38,6 @@ static bool merge_use_job_finish_times;
 static int merge_depth;
 static bool want_dense;
 
-static bool want_precedence = false;
-static std::string precedence_file;
-
-static bool want_aborts = false;
-static std::string aborts_file;
-
 static bool want_multiprocessor = false;
 static unsigned int num_processors = 1;
 
@@ -52,6 +46,7 @@ static bool want_dot_graph;
 #endif
 static double timeout;
 static unsigned int max_depth = 0;
+static unsigned int length_obs_window = 0;
 
 static bool want_rta_file;
 static bool want_width_file;
@@ -75,10 +70,7 @@ struct Analysis_result {
 
 template<class Time, class Space>
 static Analysis_result analyze(
-	std::istream &in,
-	std::istream &prec_in,
-	std::istream &aborts_in,
-    bool &is_yaml)
+	std::istream &in)
 {
 #ifdef CONFIG_PARALLEL
 	oneapi::tbb::task_arena arena(num_worker_threads ? num_worker_threads : oneapi::tbb::info::default_concurrency());
@@ -86,14 +78,9 @@ static Analysis_result analyze(
 
 
 	// Parse input files and create NP scheduling problem description
-    typename NP::Job<Time>::Job_set jobs = is_yaml ? NP::parse_yaml_job_file<Time>(in) : NP::parse_csv_job_file<Time>(in);
-	// Parse precedence constraints
-	std::vector<NP::Precedence_constraint<Time>> edges = is_yaml ? NP::parse_yaml_dag_file<Time>(prec_in) : NP::parse_precedence_file<Time>(prec_in);
-
+    typename NP::Task<Time>::Task_set tasks = NP::parse_tasks_file<Time>(in);
 	NP::Scheduling_problem<Time> problem{
-        jobs,
-		edges,
-		NP::parse_abort_file<Time>(aborts_in),
+	    tasks,
 		num_processors};
 
 	// Set common analysis options
@@ -101,6 +88,7 @@ static Analysis_result analyze(
 	opts.verbose = want_verbose;
 	opts.timeout = timeout;
 	opts.max_depth = max_depth;
+	opts.l_obs_window = length_obs_window;
 	opts.early_exit = !continue_after_dl_miss;
 	opts.be_naive = want_naive;
 	opts.merge_conservative = merge_conservative;
@@ -120,18 +108,14 @@ static Analysis_result analyze(
 	auto rta = std::ostringstream();
 
 	if (want_rta_file) {
-		rta << "Task ID, Job ID, BCCT, WCCT, BCRT, WCRT" << std::endl;
-		for (const auto& j : problem.jobs) {
-			Interval<Time> finish = space->get_finish_times(j);
-			rta << j.get_task_id() << ", "
-			    << j.get_job_id() << ", "
-			    << finish.from() << ", "
-			    << finish.until() << ", "
-			    << std::max<long long>(0,
-			                           (finish.from() - j.earliest_arrival()))
-			    << ", "
-			    << (finish.until() - j.earliest_arrival())
-			    << std::endl;
+		rta << "Segment ID, BCRT, WCRT" << std::endl;
+		for (const auto& t : problem.tasks) {
+			for (const auto& s : t.get_subtasks()) {
+				Interval<Time> rt = space->get_resp_times(s);
+				rta << s.get_name() << ", "
+					<< rt.min() << ", "
+					<< rt.max() << std::endl;
+			}
 		}
 	}
 
@@ -139,7 +123,7 @@ static Analysis_result analyze(
 	if (want_width_file) {
 		width_stream << "Depth, Width (#Nodes), Width (#States)" << std::endl;
 		const std::vector<std::pair<unsigned long, unsigned long>>& width = space->evolution_exploration_front_width();
-		for (int d = 0; d < problem.jobs.size(); d++) {
+		for (int d = 0; d < width.size(); d++) {
 			width_stream << d << ", "
 					   << width[d].first
 					   << ", "
@@ -155,7 +139,7 @@ static Analysis_result analyze(
 		space->number_of_states(),
 		space->number_of_edges(),
 		space->max_exploration_front_width(),
-		(unsigned long)(problem.jobs.size()),
+		(unsigned long)(problem.tasks.size()),
 		space->get_cpu_time(),
 		graph.str(),
 		rta.str(),
@@ -166,19 +150,16 @@ static Analysis_result analyze(
 }
 
 static Analysis_result process_stream(
-	std::istream &in,
-	std::istream &prec_in,
-	std::istream &aborts_in,
-    bool is_yaml)
+	std::istream &in)
 {
 	if (want_multiprocessor && want_dense)
-		return analyze<dense_t, NP::Global::State_space<dense_t>>(in, prec_in, aborts_in, is_yaml);
+		return analyze<dense_t, NP::Global::State_space<dense_t>>(in);
 	else if (want_multiprocessor && !want_dense)
-		return analyze<dtime_t, NP::Global::State_space<dtime_t>>(in, prec_in, aborts_in, is_yaml);
+		return analyze<dtime_t, NP::Global::State_space<dtime_t>>(in);
 	else if (want_dense)
-		return analyze<dense_t, NP::Global::State_space<dense_t>>(in, prec_in, aborts_in, is_yaml);
+		return analyze<dense_t, NP::Global::State_space<dense_t>>(in);
 	else
-		return analyze<dtime_t, NP::Global::State_space<dtime_t>>(in, prec_in, aborts_in, is_yaml);
+		return analyze<dtime_t, NP::Global::State_space<dtime_t>>(in);
 }
 
 static void process_file(const std::string& fname)
@@ -186,39 +167,13 @@ static void process_file(const std::string& fname)
 	try {
 		Analysis_result result;
 
-		auto empty_dag_stream = std::istringstream("\n");
-		auto empty_aborts_stream = std::istringstream("\n");
-		auto dag_stream = std::ifstream();
-		auto aborts_stream = std::ifstream();
-
-		if (want_precedence)
-			dag_stream.open(precedence_file);
-
-		if (want_aborts)
-			aborts_stream.open(aborts_file);
-
-		std::istream &dag_in = want_precedence ?
-			static_cast<std::istream&>(dag_stream) :
-			static_cast<std::istream&>(empty_dag_stream);
-
-		std::istream &aborts_in = want_aborts ?
-			static_cast<std::istream&>(aborts_stream) :
-			static_cast<std::istream&>(empty_aborts_stream);
-
 		if (fname == "-")
 		{
-			result = process_stream(std::cin, dag_in, aborts_in, false);
+			result = process_stream(std::cin);
 		}
 		else {
-            // check the extension of the file
-            std::string ext = fname.substr(fname.find_last_of(".") + 1);
-            bool is_yaml = false;
-            if (ext == "yaml" || ext == "yml") {
-                is_yaml = true;
-            }
-
-			auto in = std::ifstream(fname, std::ios::in);
-			result = process_stream(in, dag_in, aborts_in, is_yaml);
+            auto in = std::ifstream(fname, std::ios::in);
+			result = process_stream(in);
 
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 			if (want_dot_graph) {
@@ -235,7 +190,7 @@ static void process_file(const std::string& fname)
 #endif
 			if (want_rta_file) {
 				std::string rta_name = fname;
-				auto p = is_yaml ? rta_name.find(".yaml") : rta_name.find(".csv");
+				auto p = rta_name.find_last_of(".");
 				if (p != std::string::npos) {
 					rta_name.replace(p, std::string::npos, ".rta.csv");
 					auto out  = std::ofstream(rta_name,  std::ios::out);
@@ -246,7 +201,7 @@ static void process_file(const std::string& fname)
 
 			if (want_width_file) {
 				std::string width_file_name = fname;
-				auto p = is_yaml ? width_file_name.find(".yaml") : width_file_name.find(".csv");
+				auto p = width_file_name.find_last_of(".");
 				if (p != std::string::npos) {
 					width_file_name.replace(p, std::string::npos, ".width.csv");
 					auto out = std::ofstream(width_file_name, std::ios::out);
@@ -287,27 +242,14 @@ static void process_file(const std::string& fname)
 		          << ",  " << (int) result.timeout
 		          << ",  " << num_processors
 		          << std::endl;
-	} catch (std::ios_base::failure& ex) {
-		std::cerr << fname;
-		if (want_precedence)
-			std::cerr << " + " << precedence_file;
-		std::cerr <<  ": parse error" << std::endl;
-		exit(1);
-	} catch (NP::InvalidJobReference& ex) {
-		std::cerr << precedence_file << ": bad job reference: job "
-				  << ex.ref.job << " of task " << ex.ref.task
-				  << " is not part of the job set given in "
+	} catch (NP::InvalidSubtaskReference& ex) {
+		std::cerr << "Bad subtask reference in constraints specification: subtask "
+				  << ex.ref << " is not part of the task set given in "
 				  << fname
 				  << std::endl;
 		exit(3);
-	} catch (NP::InvalidAbortParameter& ex) {
-		std::cerr << aborts_file << ": invalid abort parameter: job "
-				  << ex.ref.job << " of task " << ex.ref.task
-				  << " has an impossible abort time (abort before release)"
-				  << std::endl;
-		exit(4);
 	} catch (NP::InvalidPrecParameter& ex) {
-		std::cerr << precedence_file << ": invalid self-suspending parameter: job "
+		std::cerr << "Invalid self - suspending parameter : job "
 				  << ex.ref.job << " of task " << ex.ref.task
 				  << " has an invalid self-suspending time"
 				  << std::endl;
@@ -363,6 +305,10 @@ int main(int argc, char** argv)
 	parser.add_option("-d", "--depth-limit").dest("depth")
 	      .help("abort graph exploration after reaching given depth (>= 2)")
 	      .set_default("0");
+
+	parser.add_option("-w", "--obs-window").dest("obs_window")
+		.help("length of the observation window analyzed by the tool (>= 2)")
+		.set_default("0");
 
 	parser.add_option("-p", "--precedence").dest("precedence_file")
 	      .help("name of the file that contains the job set's precedence DAG")
@@ -456,21 +402,14 @@ int main(int argc, char** argv)
 		max_depth -= 1;
 	}
 
-	want_precedence = options.is_set_by_user("precedence_file");
-	if (want_precedence && parser.args().size() > 1) {
-		std::cerr << "[!!] Warning: multiple job sets "
-		          << "with a single precedence DAG specified."
-		          << std::endl;
+	length_obs_window = options.get("obs_window");
+	if (options.is_set_by_user("obs_window")) {
+		if (length_obs_window <= 1) {
+			std::cerr << "Error: invalid observation window length argument\n" << std::endl;
+			return 1;
+		}
+		length_obs_window -= 1;
 	}
-	precedence_file = (const std::string&) options.get("precedence_file");
-
-	want_aborts = options.is_set_by_user("abort_file");
-	if (want_aborts && parser.args().size() > 1) {
-		std::cerr << "[!!] Warning: multiple job sets "
-		          << "with a single abort action list specified."
-		          << std::endl;
-	}
-	aborts_file = (const std::string&) options.get("abort_file");
 
 	want_multiprocessor = options.is_set_by_user("num_processors");
 	num_processors = options.get("num_processors");

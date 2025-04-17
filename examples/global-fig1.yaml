@@ -1,41 +1,49 @@
-jobset:
-  - Task ID: 1
-    Job ID: 1
-    Arrival min: 0
-    Arrival max: 0
-    Cost min: 2
-    Cost max: 4
-    Deadline: 7
-    Priority: 1
-  - Task ID: 2
-    Job ID: 1
-    Arrival min: 0
-    Arrival max: 0
-    Cost min: 10
-    Cost max: 15
-    Deadline: 20
-    Priority: 2
-  - Task ID: 3
-    Job ID: 1
-    Arrival min: 5
-    Arrival max: 5
-    Cost min: 1
-    Cost max: 7
-    Deadline: 15
-    Priority: 3
-  - Task ID: 4
-    Job ID: 1
-    Arrival min: 8
-    Arrival max: 8
-    Cost min: 2
-    Cost max: 3
-    Deadline: 20
-    Priority: 4
-  - Task ID: 5
-    Job ID: 1
-    Arrival min: 8
-    Arrival max: 8
-    Cost min: 1
-    Cost max: 1
-    Deadline: 14
-    Priority: 5
+taskset:
+  - id: T0
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 100, max: 200}
+    releaseJitter: 10
+    deadline: 100
+    - subtaskId: S0
+      offset: {min: 0, max: 10}
+      execTime: 
+      - {parallelism: 1, bcet: 2, wcet: 5}
+      - {parallelism: 2, bcet: 1, wcet: 3}
+      deadline: 20
+      priority: 20
+      predecessors:
+      - startBefore:
+        - {id:S1, delay: {min: 0, max: 0}}
+        - {id: S2, delay: {min: 1, max: 2}}
+      - finishBefore:
+        - {id: S3, delay: {min: 1, max: 2}}
+    - subtaskID: S1
+    - subTaskID: S2
+    exclusionConstraints:
+    - [S1, S2]
+    - [S1, S3]
+    
+  - id: T1
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 100, max: 200}
+    releaseJitter: 10
+    deadline: 100
+    - subtaskId: S0
+      offset: {min: 0, max: 10}
+      execTime: 
+      - {parallelism: 1, bcet: 2, wcet: 5}
+      - {parallelism: 2, bcet: 1, wcet: 3}
+      deadline: 20
+      priority: 20
+      predecessors:
+      - startBefore:
+        - {id:S1, delay: {min: 0, max: 0}}
+        - {id: S2, delay: {min: 1, max: 2}}
+      - finishBefore:
+        - {id: S3, delay: {min: 1, max: 2}}
+    - subtaskID: S1
+    - subTaskID: S2
+    exclusionConstraints:
+    - [S1, S2]
+    - [S1, S3]
+ 
