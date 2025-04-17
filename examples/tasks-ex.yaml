@@ -1,0 +1,78 @@
+taskset:
+  - id: T0
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 100, max: 200}
+    releaseJitter: 10
+    deadline: 100
+    segments:
+    - id: S0
+      offset: {min: 0, max: 10}
+      execTime: 
+      - {parallelism: 1, bcet: 2, wcet: 5}
+      - {parallelism: 2, bcet: 1, wcet: 3}
+      deadline: 20
+      priority: 20
+      predecessors:
+      - startBefore:
+        - {id:S1, delay: {min: 0, max: 0}}
+        - {id: S2, delay: {min: 1, max: 2}}
+      - finishBefore:
+        - {id: S3, delay: {min: 1, max: 2}}
+    - id: S1
+      offset: {min: 0, max: 10}
+      execTime: 
+      - {parallelism: 1, bcet: 2, wcet: 5}
+      - {parallelism: 2, bcet: 1, wcet: 3}
+      deadline: 20
+      priority: 20
+      predecessors:
+    - id: S2
+      offset: {min: 0, max: 10}
+      execTime: 
+      - {parallelism: 1, bcet: 2, wcet: 5}
+      - {parallelism: 2, bcet: 1, wcet: 3}
+      deadline: 20
+      priority: 20
+      predecessors:
+    exclusionConstraints:
+    - {segments: [S1, S2], minSeparation: 10}
+    - {segments: [S2, S0], minSeparation: 2}    
+  - id: T1
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 100, max: 200}
+    releaseJitter: 10
+    deadline: 100
+    segments:
+    - id: S0
+      offset: {min: 0, max: 10}
+      execTime: 
+      - {parallelism: 1, bcet: 2, wcet: 5}
+      - {parallelism: 2, bcet: 1, wcet: 3}
+      deadline: 20
+      priority: 20
+      predecessors:
+      - startBefore:
+        - {id:S1, delay: {min: 0, max: 0}}
+        - {id: S2, delay: {min: 1, max: 2}}
+      - finishBefore:
+        - {id: S3, delay: {min: 1, max: 2}}
+    - id: S1
+      offset: {min: 0, max: 10}
+      execTime: 
+      - {parallelism: 1, bcet: 2, wcet: 5}
+      - {parallelism: 2, bcet: 1, wcet: 3}
+      deadline: 20
+      priority: 20
+      predecessors:
+    - id: S2
+      offset: {min: 0, max: 10}
+      execTime: 
+      - {parallelism: 1, bcet: 2, wcet: 5}
+      - {parallelism: 2, bcet: 1, wcet: 3}
+      deadline: 20
+      priority: 20
+      predecessors:
+    exclusionConstraints:
+    - {segments: [S1, S2], minSeparation: 10}
+    - {segments: [S2, S1], minSeparation: 2}
+ 

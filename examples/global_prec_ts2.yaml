@@ -1,0 +1,51 @@
+taskset:
+  - id: T1
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 40000, max: 40000}
+    releaseJitter: 0
+    deadline: 40000
+    segments:
+    - id: S1
+      execTime: 
+      - {bcet: 2000, wcet: 5000}
+      priority: 0 
+    - id: S2
+      execTime:
+      - {bcet: 3000, wcet: 10000}
+      priority: 0 
+      predecessors:
+      - finishBefore:
+        - {id: S1} 
+    - id: S3
+      execTime:
+      - {bcet: 3000, wcet: 10000}
+      priority: 0 
+      predecessors:
+      - finishBefore:
+        - {id: S1}
+    - id: S4
+      execTime:
+      - {bcet: 3000, wcet: 10000}
+      priority: 0 
+      predecessors:
+      - finishBefore:
+        - {id: S1}
+    - id: S5
+      execTime:
+      - {bcet: 5000, wcet: 15000}
+      priority: 0
+      predecessors:
+      - finishBefore:
+        - {id: S3}
+        - {id: S4}
+  - id: T2
+    arrival: {min: 0, max: 40000}
+    interarrival: {min: 80000, max: 80000}
+    releaseJitter: 0
+    deadline: 80000
+    segments:
+    - id: S1
+      execTime: 
+      - {bcet: 0, wcet: 10000}
+      priority: 2
+ 

@@ -1,0 +1,44 @@
+taskset:
+  - id: T0
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 100, max: 100}
+    releaseJitter: 10
+    deadline: 100
+    segments:
+    - id: S0
+      offset: {min: 0, max: 0}
+      execTime: 
+      - {parallelism: 1, bcet: 50, wcet: 50}
+      deadline: 100
+      priority: 0
+      predecessors:
+    exclusionConstraints:   
+  - id: T1
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 200, max: 200}
+    releaseJitter: 10
+    deadline: 200
+    segments:
+    - id: S0
+      offset: {min: 0, max: 0}
+      execTime: 
+      - {parallelism: 1, bcet: 40, wcet: 40}
+      deadline: 200
+      priority: 1
+      predecessors:
+    exclusionConstraints:
+  - id: T2
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 200, max: 200}
+    releaseJitter: 10
+    deadline: 200
+    segments:
+    - id: S0
+      offset: {min: 0, max: 0}
+      execTime: 
+      - {parallelism: 1, bcet: 10, wcet: 10}
+      deadline: 200
+      priority: 2
+      predecessors:
+    exclusionConstraints:
+ 

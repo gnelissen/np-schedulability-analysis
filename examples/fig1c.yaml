@@ -1,0 +1,32 @@
+taskset:
+  - id: T0
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 10, max: 10}
+    releaseJitter: 0
+    deadline: 10
+    segments:
+    - id: S0
+      execTime: 
+      - {bcet: 5000, wcet: 15000}
+      priority: 0   
+  - id: T1
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 30, max: 30}
+    releaseJitter: 0
+    deadline: 30
+    segments:
+    - id: S0
+      execTime: 
+      - {bcet: 7, wcet: 8}
+      priority: 2
+  - id: T2
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 60, max: 60}
+    releaseJitter: 0
+    deadline: 60
+    segments:
+    - id: S0
+      execTime: 
+      - {bcet: 3, wcet: 13}
+      priority: 1
+ 
