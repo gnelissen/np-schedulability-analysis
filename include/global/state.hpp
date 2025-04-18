@@ -402,16 +402,17 @@ namespace NP {
 			void print_vertex_label(std::ostream& out,
 				const typename Task<Time>::Task_set& tasks) const
 			{
+				out << "Avail: ";
 				for (const auto& a : core_avail)
-					out << "[" << a.from() << ", " << a.until() << "] ";
-				out << "\\n";
+					out << "[" << a.from() << ", " << a.until() << "); ";
+				out << std::endl;
 				bool first = true;
-				out << "{";
+				out << "Run: {";
 				for (const auto& rj : certain_subtasks) {
 					if (!first)
 						out << ", ";
-					out << rj.name << ":"
-						<< rj.finish_time.min() << "-" << rj.finish_time.max();
+					out << tasks[rj.task].get_subtask(rj.subtask).get_name() << "=["
+						<< rj.finish_time.min() << "," << rj.finish_time.max() << ")";
 					first = false;
 				}
 				out << "}";

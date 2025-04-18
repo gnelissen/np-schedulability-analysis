@@ -152,25 +152,27 @@ namespace NP {
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 
 			struct Edge {
-				const Job<Time>* scheduled;
+				const Subtask<Time>* scheduled;
 				const Node* source;
 				const Node* target;
 				const Interval<Time> finish_range;
 				const unsigned int parallelism;
+				const bool deadline_miss;
 
-				Edge(const Job<Time>* s, const Node* src, const Node* tgt,
-					const Interval<Time>& fr, unsigned int parallelism = 1)
+				Edge(const Subtask<Time>* s, const Node* src, const Node* tgt,
+					const Interval<Time>& fr, bool dl_miss, unsigned int parallelism = 1)
 					: scheduled(s)
 					, source(src)
 					, target(tgt)
 					, finish_range(fr)
 					, parallelism(parallelism)
+					, deadline_miss(dl_miss)
 				{
 				}
 
 				bool deadline_miss_possible() const
 				{
-					return scheduled->exceeds_deadline(finish_range.upto());
+					return deadline_miss;
 				}
 
 				Time earliest_finish_time() const
@@ -320,12 +322,16 @@ namespace NP {
 				, current_job_count(0)
 				, num_cpus(num_cpus)
 				, early_exit(early_exit)
+#ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
+				, nodes_storage(max_depth+2)
+#else
 				, nodes_storage(2)
+#endif
 #ifdef CONFIG_PARALLEL
 				, partial_rta(tasks.size())
 #endif
 			{
-				width.reserve(max_depth);
+				width.reserve(max_depth+1);
 				for (int i = 0; i < tasks.size(); i++)
 					rta[i].resize(tasks[i].num_subtasks());
 			}
@@ -391,7 +397,15 @@ namespace NP {
 
 			Nodes& nodes(const int depth = 0)
 			{
+#ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
+				if (nodes_storage.size() <= current_job_count + depth) {
+					aborted = true;
+					return nodes_storage[current_job_count];
+				}
+				return nodes_storage[(current_job_count + depth)];
+#else
 				return nodes_storage[(current_job_count + depth) % nodes_storage.size()];
+#endif
 			}
 
 			template <typename... Args>
@@ -809,7 +823,7 @@ namespace NP {
 #endif
 
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
-						edges.emplace_back(&j, &n, next, ftimes);
+						edges.emplace_back(j, &n, next, Interval<Time>{ eft,lft }, observed_deadline_miss, p);
 #endif
 						count_edge();
 					}
@@ -997,19 +1011,10 @@ namespace NP {
 						for (State* s : *n_states)
 						{
 							out << "[";
-							s->print_vertex_label(out, space.state_space_data.jobs);
-							out << "]\\n";
+							s->print_vertex_label(out, space.state_space_data.tasks);
+							out << "]"<<std::endl;
 						}
-						out << "}"
-							<< "\\nER=";
-						if (n->earliest_job_release() ==
-							Time_model::constants<Time>::infinity()) {
-							out << "N/A";
-						}
-						else {
-							out << n->earliest_job_release();
-						}
-						out << "\"];"
+						out << "}\"]"
 							<< std::endl;
 					}
 				}
@@ -1018,9 +1023,7 @@ namespace NP {
 						<< " -> "
 						<< "N" << node_id[e.target]
 						<< "[label=\""
-						<< "T" << e.scheduled->get_task_id()
-						<< " J" << e.scheduled->get_job_id()
-						<< "\\nDL=" << e.scheduled->get_deadline()
+						<< e.scheduled->get_name()
 						<< "\\nES=" << e.earliest_start_time()
 						<< "\\nLS=" << e.latest_start_time()
 						<< "\\nEF=" << e.earliest_finish_time()

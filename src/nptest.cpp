@@ -179,7 +179,7 @@ static void process_file(const std::string& fname)
 			if (want_dot_graph) {
 				DM("\nDot graph being made\n");
 				std::string dot_name = fname;
-				auto p = is_yaml ? dot_name.find(".yaml") : dot_name.find(".csv");
+				auto p = dot_name.find_last_of(".");
 				if (p != std::string::npos) {
 					dot_name.replace(p, std::string::npos, ".dot");
 					auto out  = std::ofstream(dot_name,  std::ios::out);
