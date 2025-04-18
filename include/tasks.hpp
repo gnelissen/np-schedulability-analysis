@@ -203,46 +203,39 @@ namespace NP {
 	    typedef Time Priority;
 
 		struct Precedence_cstr {
-		    Subtask_ref subtask;
+		    Subtask_index subtask;
 		    Interval<Time> delay;
+			Precedence_cstr(Subtask_index subtask, Interval<Time> delay)
+				: subtask(subtask), delay(delay) {}
 		};
 		struct Successors {
 		    std::vector<Precedence_cstr> start_after_start; // set of jobs that must start after j starts
 		    std::vector<Precedence_cstr> start_after_finish; // set of jobs that must start after j finishes
 		    std::vector<Precedence_cstr> exclusions; // set of jobs that must not execute in parallel to j, i.e., it must either precede or succede j
 
-			void add_after_start(Subtask_ref subtask, Interval<Time> delay) {
-			    Precedence_cstr cstr;
-			    cstr.subtask = subtask;
-			    cstr.delay = delay;
-			    start_after_start.push_back(cstr);
+			void add_after_start(Subtask_index subtask, Interval<Time> delay) {
+			    start_after_start.emplace_back(subtask, delay);
 		    }
 
-			void add_after_finish(Subtask_ref subtask, Interval<Time> delay) {
-			    Precedence_cstr cstr;
-			    cstr.subtask = subtask;
-			    cstr.delay = delay;
-			    start_after_finish.push_back(cstr);
+			void add_after_finish(Subtask_index subtask, Interval<Time> delay) {
+			    start_after_finish.emplace_back(subtask, delay);
 		    }
 
-			void add_exclusion_cstr(Subtask_ref subtask, Interval<Time> delay) {
-			    Precedence_cstr cstr;
-			    cstr.subtask = subtask;
-			    cstr.delay = delay;
-				exclusions.push_back(cstr);
+			void add_exclusion_cstr(Subtask_index subtask, Interval<Time> delay) {
+				exclusions.emplace_back(subtask, delay);
 		    }
 
 			bool contains(Subtask_index id) {
 				for (const auto& s : start_after_start) {
-					if (s.subtask->id() == id)
+					if (s.subtask == id)
 						return true;
 				}
 				for (const auto& s : start_after_finish) {
-					if (s.subtask->id() == id)
+					if (s.subtask == id)
 						return true;
 				}
 				for (const auto& s : exclusions) {
-					if (s.subtask->id() == id)
+					if (s.subtask == id)
 						return true;
 				}
 			}
@@ -252,38 +245,29 @@ namespace NP {
 		    std::vector<Precedence_cstr> finish_before_start; // set of jobs that must finish before j starts
 		    std::vector<Precedence_cstr> exclusions; // set of jobs that must not execute in parallel to j, i.e., it must either precede or succede j
 
-			void add_start_before(Subtask_ref subtask, Interval<Time> delay) {
-			    Precedence_cstr cstr;
-			    cstr.subtask = subtask;
-			    cstr.delay = delay;
-			    start_before_start.push_back(cstr);
+			void add_start_before(Subtask_index subtask, Interval<Time> delay) {
+			    start_before_start.emplace_back(subtask, delay);
 		    }
 
-		    void add_finish_before(Subtask_ref subtask, Interval<Time> delay) {
-			    Precedence_cstr cstr;
-			    cstr.subtask = subtask;
-			    cstr.delay = delay;
-			    finish_before_start.push_back(cstr);
+		    void add_finish_before(Subtask_index subtask, Interval<Time> delay) {
+			    finish_before_start.emplace_back(subtask, delay);
 		    }
 
-		    void add_exclusion_cstr(Subtask_ref subtask, Interval<Time> delay) {
-			    Precedence_cstr cstr;
-			    cstr.subtask = subtask;
-			    cstr.delay = delay;
-			    exclusions.push_back(cstr);
+		    void add_exclusion_cstr(Subtask_index subtask, Interval<Time> delay) {
+			    exclusions.emplace_back(subtask, delay);
 		    }
 
 			bool contains(Subtask_index id) const {
 				for (const auto& s : start_before_start) {
-					if (s.subtask->id() == id)
+					if (s.subtask == id)
 						return true;
 				}
 				for (const auto& s : finish_before_start) {
-					if (s.subtask->id() == id)
+					if (s.subtask == id)
 						return true;
 				}
 				for (const auto& s : exclusions) {
-					if (s.subtask->id() == id)
+					if (s.subtask == id)
 						return true;
 				}
 			}
@@ -298,8 +282,8 @@ namespace NP {
 	    const std::vector<Subtask<Time>> subtasks; // list of subtasks 
 
 		// list of precedence constraints between subtasks
-	    const std::vector<Successors> successors_of;
-	    const std::vector<Predecessors> predecessors_of; 
+	    std::vector<Successors> successors_of;
+	    std::vector<Predecessors> predecessors_of; 
 
 		hash_value_t key;
 
@@ -382,9 +366,9 @@ namespace NP {
 			return subtasks.size();
 		}
 
-		Subtask_ref get_subtask(Subtask_index i) const {
+		const Subtask<Time>& get_subtask(Subtask_index i) const {
 		    assert(i < subtasks.size());
-			return &(subtasks[i]);
+			return subtasks[i];
 	    }
 
 		const std::vector<Successors>& get_successors() const {
@@ -455,14 +439,14 @@ namespace NP {
 	};
 
 	template<class Time>
-	const Subtask<Time>& lookup(const std::vector<Subtask<Time>>& subtasks,
+	Subtask_index lookup(const std::vector<Subtask<Time>>& subtasks,
 		const std::string& id)
 	{
 		auto pos = std::find_if(subtasks.begin(), subtasks.end(),
 			[id](const Subtask<Time>& j) { return j.get_name() == id; });
 		if (pos == subtasks.end())
 			throw InvalidSubtaskReference(id);
-		return *pos;
+		return pos->id();
 	}
 
 }

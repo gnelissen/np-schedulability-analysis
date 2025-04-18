@@ -18,7 +18,6 @@ namespace NP {
 	typename Task<Time>::Task_set parse_tasks_file(std::istream& in)
 	{
 		typename Task<Time>::Task_set tasks;
-
         // task parameters
 		std::string tid;
 		Time arr_min, arr_max, interarr_min, interarr_max, jitter, dl;
@@ -102,27 +101,39 @@ namespace NP {
 						if (pred_cstr["startBefore"]) {
 							for (const auto& p : pred_cstr["startBefore"]) {
 								pred_id = p["id"].as<std::string>();
-								const auto delay = p["delay"];
-								delay_min = delay["min"].as<Time>();
-								delay_max = delay["max"].as<Time>();
+								if (p["delay"]) {
+									const auto delay = p["delay"];
+									delay_min = delay["min"].as<Time>();
+									delay_max = delay["max"].as<Time>();
+								}
+								else {
+									delay_min = 0;
+									delay_max = 0;
+								}
 
 								std::string predname = tid + ":" + pred_id;
-								const Subtask<Time>& pred = lookup(subtasks, predname);
-								predecessors[i].add_start_before(&pred, Interval<Time>{delay_min, delay_max});
-								successors[pred.id()].add_after_start(&subtasks[i], Interval<Time>{delay_min, delay_max});
+								const Subtask_index pred = lookup(subtasks, predname);
+								predecessors[i].add_start_before(pred, Interval<Time>{delay_min, delay_max});
+								successors[pred].add_after_start(i, Interval<Time>{delay_min, delay_max});
 							}
 						}
 						if (pred_cstr["finishBefore"]) {
 							for (const auto& p : pred_cstr["finishBefore"]) {
 								pred_id = p["id"].as<std::string>();
-								const auto delay = p["delay"];
-								delay_min = delay["min"].as<Time>();
-								delay_max = delay["max"].as<Time>();
+								if (p["delay"]) {
+									const auto delay = p["delay"];
+									delay_min = delay["min"].as<Time>();
+									delay_max = delay["max"].as<Time>();
+								}
+								else {
+									delay_min = 0;
+									delay_max = 0;
+								}
 
 								std::string predname = tid + ":" + pred_id;
-								const Subtask<Time>& pred = lookup(subtasks, predname);
-								predecessors[i].add_finish_before(&pred, Interval<Time>{delay_min, delay_max});
-								successors[pred.id()].add_after_finish(&subtasks[i], Interval<Time>{delay_min, delay_max});
+								const Subtask_index pred = lookup(subtasks, predname);
+								predecessors[i].add_finish_before(pred, Interval<Time>{delay_min, delay_max});
+								successors[pred].add_after_finish(i, Interval<Time>{delay_min, delay_max});
 							}
 						}
 					}
@@ -137,12 +148,12 @@ namespace NP {
 
 						std::string nameSa = tid + ":" + sa;
 						std::string nameSb = tid + ":" + sb;
-						const Subtask<Time>& sbtska = lookup(subtasks, nameSa);
-						const Subtask<Time>& sbtskb = lookup(subtasks, nameSb);
-						successors[sbtska.id()].add_exclusion_cstr(&sbtskb, Interval<Time>{sep, sep});
-						successors[sbtskb.id()].add_exclusion_cstr(&sbtska, Interval<Time>{sep, sep});
-						predecessors[sbtska.id()].add_exclusion_cstr(&sbtskb, Interval<Time>{sep, sep});
-						predecessors[sbtskb.id()].add_exclusion_cstr(&sbtska, Interval<Time>{sep, sep});
+						const Subtask_index sbtska = lookup(subtasks, nameSa);
+						const Subtask_index sbtskb = lookup(subtasks, nameSb);
+						successors[sbtska].add_exclusion_cstr(sbtskb, Interval<Time>{sep, sep});
+						successors[sbtskb].add_exclusion_cstr(sbtska, Interval<Time>{sep, sep});
+						predecessors[sbtska].add_exclusion_cstr(sbtskb, Interval<Time>{sep, sep});
+						predecessors[sbtskb].add_exclusion_cstr(sbtska, Interval<Time>{sep, sep});
 					}
 				}
 				tasks.emplace_back(tidx, Interval<Time>{interarr_min, interarr_max}, jitter, Interval<Time>{arr_min, arr_max}, dl, subtasks, successors, predecessors);

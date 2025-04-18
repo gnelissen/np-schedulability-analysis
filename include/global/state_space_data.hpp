@@ -42,8 +42,7 @@ namespace NP {
 			const unsigned int num_cpus;
 
 		public:
-			// use these const references to ensure read-only access
-			const Task_set& tasks;
+			const Task_set tasks;
 
 			State_space_data(const Task_set& tasks,
 				const Abort_actions& aborts,
@@ -79,19 +78,19 @@ namespace NP {
 				const auto& predecessors = task.get_predecessors_of(j.id());
 				for (const auto& pred : predecessors.start_before_start)
 				{
-					Interval<Time> st = s.get_start_times(t_id, pred.subtask->id());
+					Interval<Time> st = s.get_start_times(t_id, pred.subtask);
 					r.lower_bound(st.min() + pred.delay.min());
 					r.extend_to(st.max() + pred.delay.max());
 				}
 				for (const auto& pred : predecessors.finish_before_start)
 				{
-					Interval<Time> ft = s.get_finish_times(t_id, pred.subtask->id());
+					Interval<Time> ft = s.get_finish_times(t_id, pred.subtask);
 					r.lower_bound(ft.min() + pred.delay.min());
 					r.extend_to(ft.max() + pred.delay.max());
 				}
 				for (const auto& pred : predecessors.exclusions)
 				{
-					Interval<Time> ft = s.get_finish_times(t_id, pred.subtask->id());
+					Interval<Time> ft = s.get_finish_times(t_id, pred.subtask);
 					if (ft.min() > 0) {
 						r.lower_bound(ft.min() + pred.delay.min());
 						r.extend_to(ft.max() + pred.delay.max());
@@ -110,7 +109,7 @@ namespace NP {
 
 			// This function assumes `j` is already dispatched in `s`.
 			// It then checks if the subtask `j` certainly completed its execution in `s`
-			bool is_cert_finished(Subtask_ref j, const Node& n, const State& s) const
+			bool is_cert_finished(const Subtask<Time>& j, const Node& n, const State& s) const
 			{
 				// If there is a single core, all dispatched jobs must have finished when the core becomes available.
 				if (num_cpus == 1)
@@ -135,7 +134,7 @@ namespace NP {
 				//
 				// (F) Since ca(1).min() <= T < F == ft(j).min(), it follows that ca(1).min() < ft(j).min(),
 				//     which contradicts the condition that ft(j).min() <= ca(1).min().
-				Interval<Time> ft = s.get_finish_times(j->task_id(), j->id());
+				Interval<Time> ft = s.get_finish_times(j.task_id(), j.id());
 				if (ft.min() <= s.core_availability(1).min() && ft.max() <= s.core_availability(2).min())
 					return true;
 
@@ -145,9 +144,9 @@ namespace NP {
 					return true;
 
 				// If at least one successor of j has already been dispatched, then j must have finished already.
-				const auto& successors = tasks[j->task_id()].get_successors_of(j->id());
+				const auto& successors = tasks[j.task_id()].get_successors_of(j.id());
 				for (const auto& succ : successors.start_after_finish) {
-					if (is_dispatched(n, *succ.subtask)) {
+					if (is_dispatched(n, j.task_id(), succ.subtask)) {
 						return true;
 					}
 				}
@@ -194,7 +193,7 @@ namespace NP {
 				const auto& predecessors_j_high = tasks[j_high.task_id()].get_predecessors_of(j_high.id());
 				for (const auto& pred_j_high : predecessors_j_high.finish_before_start)
 				{
-					Subtask_ref j_pred = pred_j_high.subtask;
+					const Subtask<Time>& j_pred = tasks[j_high.task_id()].get_subtask(pred_j_high.subtask);
 
 					// If the suspension is 0 and j_pred is certainly finished when j_low is dispatched, then j_pred cannot postpone
 					// the (latest) ready time of j_high.
@@ -215,7 +214,7 @@ namespace NP {
 						// Note that the condition `susp_max(j_pred -> j_high) <= susp_min(j_pred -> j_low)` will be true if and only if there
 						// exists a constraint from j_pred to j_low whose *minimum* suspension is at least `susp_max(j_pred -> j_high)`. So we can
 						// stop searching as soon as we find one such constraint.
-						if (pred_j_low.subtask == j_pred && pred_j_low.delay.min() >= pred_j_high.delay.max()) {
+						if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() >= pred_j_high.delay.max()) {
 							can_disregard = true;
 							break;
 						}
@@ -231,7 +230,7 @@ namespace NP {
 						continue;
 					}
 
-					Interval<Time> ft = s.get_finish_times(j_pred->task_id(), j_pred->id());
+					Interval<Time> ft = s.get_finish_times(j_pred.task_id(), j_pred.id());
 					latest_ready_high = std::max(latest_ready_high, ft.max() + pred_j_high.delay.max());
 				}
 				return latest_ready_high;
@@ -280,6 +279,11 @@ namespace NP {
 			bool is_dispatched(const Node& n, const Subtask<Time>& j) const
 			{
 				return n.is_dispatched(j);
+			}
+
+			bool is_dispatched(const Node& n, Task_index i, Subtask_index j) const
+			{
+				return n.is_dispatched(i, j);
 			}
 
 			State_space_data(const State_space_data& origin) = delete;

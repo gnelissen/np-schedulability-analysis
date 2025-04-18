@@ -1,0 +1,699 @@
+taskset:
+  - id: T1
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 10000, max: 10000}
+    releaseJitter: 0
+    deadline: 10000
+    segments:
+    - id: S0
+      execTime: 
+      - {bcet: 158, wcet: 226}
+      priority: 0 
+    - id: S1
+      execTime:
+      - {bcet: 63, wcet: 90}
+      priority: 0 
+      predecessors:
+        finishBefore:
+        - {id: S2}
+        - {id: S4}
+        - {id: S0} 
+    - id: S2
+      execTime:
+      - {bcet: 50, wcet: 71}
+      priority: 0 
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S3
+      execTime:
+      - {bcet: 61, wcet: 87}
+      priority: 0 
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S4
+      execTime:
+      - {bcet: 57, wcet: 82}
+      priority: 0 
+      predecessors:
+        finishBefore:
+        - {id: S5}
+        - {id: S6}
+        - {id: S7}
+        - {id: S2}
+    - id: S5
+      execTime:
+      - {bcet: 151, wcet: 216}
+      priority: 0
+      predecessors:
+        finishBefore:
+        - {id: S3}
+    - id: S6
+      execTime:
+      - {bcet: 50, wcet: 71}
+      priority: 0
+      predecessors:
+        finishBefore:
+        - {id: S3}
+    - id: S7
+      execTime:
+      - {bcet: 158, wcet: 226}
+      priority: 0 
+      predecessors:
+        finishBefore:
+        - {id: S3}
+        - {id: S2}
+  - id: T2
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 10000, max: 10000}
+    releaseJitter: 0
+    deadline: 10000
+    segments:
+    - id: S0
+      execTime: 
+      - {bcet: 194, wcet: 277}
+      priority: 1 
+    - id: S1
+      execTime:
+      - {bcet: 69, wcet: 99}
+      priority: 1 
+      predecessors:
+        finishBefore:
+        - {id: S3}
+        - {id: S8}
+        - {id: S12} 
+        - {id: S4}
+    - id: S2
+      execTime:
+      - {bcet: 43, wcet: 61}
+      priority: 1
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S3
+      execTime:
+      - {bcet: 165, wcet: 236}
+      priority: 1
+      predecessors:
+        finishBefore:
+        - {id: S4}
+        - {id: S5}
+        - {id: S6}
+        - {id: S0}
+        - {id: S2}
+    - id: S4
+      execTime:
+      - {bcet: 223, wcet: 319}
+      priority: 1
+      predecessors:
+        finishBefore:
+        - {id: S2}
+        - {id: S0}
+        - {id: S12}
+    - id: S5
+      execTime:
+      - {bcet: 91, wcet: 130}
+      priority: 1
+      predecessors:
+        finishBefore:
+        - {id: S2}
+        - {id: S7}
+        - {id: S12}
+    - id: S6
+      execTime:
+      - {bcet: 50, wcet: 71}
+      priority: 1
+      predecessors:
+        finishBefore:
+        - {id: S2}
+    - id: S7
+      execTime:
+      - {bcet: 132, wcet: 188}
+      priority: 1
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S8
+      execTime:
+      - {bcet: 243, wcet: 348}
+      priority: 1
+      predecessors:
+        finishBefore:
+        - {id: S9}
+        - {id: S10}
+        - {id: S11}
+        - {id: S2}
+        - {id: S12}
+    - id: S9
+      execTime:
+      - {bcet: 204, wcet: 292}
+      priority: 1
+      predecessors:
+        finishBefore:
+        - {id: S7}
+    - id: S10
+      execTime:
+      - {bcet: 190, wcet: 272}
+      priority: 1
+      predecessors:
+        finishBefore:
+        - {id: S7}
+        - {id: S2}
+    - id: S11
+      execTime:
+      - {bcet: 156, wcet: 223}
+      priority: 1
+      predecessors:
+        finishBefore:
+        - {id: S7}
+    - id: S12
+      execTime:
+      - {bcet: 215, wcet: 307}
+      priority: 1
+      predecessors:
+        finishBefore:
+        - {id: S0}
+  - id: T3
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 10000, max: 10000}
+    releaseJitter: 0
+    deadline: 10000
+    segments:
+    - id: S0
+      execTime: 
+      - {bcet: 66, wcet: 95}
+      priority: 2
+    - id: S1
+      execTime:
+      - {bcet: 78, wcet: 111}
+      priority: 2 
+      predecessors:
+        finishBefore:
+        - {id: S3}
+        - {id: S7}
+        - {id: S8}
+    - id: S2
+      execTime:
+      - {bcet: 51, wcet: 73}
+      priority: 2
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S3
+      execTime:
+      - {bcet: 13, wcet: 19}
+      priority: 2
+      predecessors:
+        finishBefore:
+        - {id: S4}
+        - {id: S5}
+        - {id: S8}
+    - id: S4
+      execTime:
+      - {bcet: 15, wcet: 21}
+      priority: 2
+      predecessors:
+        finishBefore:
+        - {id: S2}
+    - id: S5
+      execTime:
+      - {bcet: 58, wcet: 83}
+      priority: 2
+      predecessors:
+        finishBefore:
+        - {id: S2}
+    - id: S6
+      execTime:
+      - {bcet: 69, wcet: 99}
+      priority: 2
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S7
+      execTime:
+      - {bcet: 108, wcet: 155}
+      priority: 2
+      predecessors:
+        finishBefore:
+        - {id: S8}
+        - {id: S9}
+        - {id: S10}
+    - id: S8
+      execTime:
+      - {bcet: 30, wcet: 43}
+      priority: 2
+      predecessors:
+        finishBefore:
+        - {id: S6}
+    - id: S9
+      execTime:
+      - {bcet: 123, wcet: 176}
+      priority: 2
+      predecessors:
+        finishBefore:
+        - {id: S6}
+        - {id: S0}
+    - id: S10
+      execTime:
+      - {bcet: 181, wcet: 259}
+      priority: 2
+      predecessors:
+        finishBefore:
+        - {id: S6}
+        - {id: S0}
+  - id: T4
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 15000, max: 15000}
+    releaseJitter: 0
+    deadline: 15000
+    segments:
+    - id: S0
+      execTime: 
+      - {bcet: 28, wcet: 40}
+      priority: 3
+    - id: S1
+      execTime:
+      - {bcet: 21, wcet: 30}
+      priority: 3
+      predecessors:
+        finishBefore:
+        - {id: S3}
+        - {id: S6}
+        - {id: S8}
+    - id: S2
+      execTime:
+      - {bcet: 18, wcet: 26}
+      priority: 3
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S3
+      execTime:
+      - {bcet: 2, wcet: 3}
+      priority: 3
+      predecessors:
+        finishBefore:
+        - {id: S4}
+        - {id: S5}
+    - id: S4
+      execTime:
+      - {bcet: 17, wcet: 24}
+      priority: 3
+      predecessors:
+        finishBefore:
+        - {id: S2}
+        - {id: S7}
+    - id: S5
+      execTime:
+      - {bcet: 12, wcet: 17}
+      priority: 3
+      predecessors:
+        finishBefore:
+        - {id: S2}
+        - {id: S6}
+    - id: S6
+      execTime:
+      - {bcet: 6, wcet: 8}
+      priority: 3
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S7
+      execTime:
+      - {bcet: 7, wcet: 10}
+      priority: 3
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S8
+      execTime:
+      - {bcet: 17, wcet: 25}
+      priority: 3
+      predecessors:
+        finishBefore:
+        - {id: S9}
+        - {id: S10}
+        - {id: S4}
+    - id: S9
+      execTime:
+      - {bcet: 28, wcet: 41}
+      priority: 3
+      predecessors:
+        finishBefore:
+        - {id: S7}
+        - {id: S0}
+    - id: S10
+      execTime:
+      - {bcet: 5, wcet: 7}
+      priority: 3
+      predecessors:
+        finishBefore:
+        - {id: S7}
+        - {id: S2}
+  - id: T5
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 30000, max: 30000}
+    releaseJitter: 0
+    deadline: 30000
+    segments:
+    - id: S0
+      execTime: 
+      - {bcet: 8, wcet: 12}
+      priority: 4
+    - id: S1
+      execTime:
+      - {bcet: 15, wcet: 21}
+      priority: 4
+      predecessors:
+        finishBefore:
+        - {id: S3}
+        - {id: S6}
+        - {id: S7}
+    - id: S2
+      execTime:
+      - {bcet: 24, wcet: 34}
+      priority: 4
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S3
+      execTime:
+      - {bcet: 20, wcet: 28}
+      priority: 4
+      predecessors:
+        finishBefore:
+        - {id: S4}
+        - {id: S5}
+        - {id: S7}
+    - id: S4
+      execTime:
+      - {bcet: 48, wcet: 69}
+      priority: 4
+      predecessors:
+        finishBefore:
+        - {id: S2}
+        - {id: S6}
+    - id: S5
+      execTime:
+      - {bcet: 47, wcet: 67}
+      priority: 4
+      predecessors:
+        finishBefore:
+        - {id: S2}
+        - {id: S0}
+    - id: S6
+      execTime:
+      - {bcet: 1, wcet: 1}
+      priority: 4
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S7
+      execTime:
+      - {bcet: 27, wcet: 38}
+      priority: 4
+      predecessors:
+        finishBefore:
+        - {id: S0}
+  - id: T6
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 55000, max: 55000}
+    releaseJitter: 0
+    deadline: 55000
+    segments:
+    - id: S0
+      execTime: 
+      - {bcet: 97, wcet: 139}
+      priority: 5
+    - id: S1
+      execTime:
+      - {bcet: 1191, wcet: 1702}
+      priority: 5
+      predecessors:
+        finishBefore:
+        - {id: S3}
+        - {id: S6}
+        - {id: S8}
+    - id: S2
+      execTime:
+      - {bcet: 45, wcet: 65}
+      priority: 5
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S3
+      execTime:
+      - {bcet: 230, wcet: 329}
+      priority: 5
+      predecessors:
+        finishBefore:
+        - {id: S4}
+        - {id: S5}
+        - {id: S6}
+        - {id: S0}
+        - {id: S9}
+    - id: S4
+      execTime:
+      - {bcet: 1730, wcet: 2471}
+      priority: 5
+      predecessors:
+        finishBefore:
+        - {id: S2}
+    - id: S5
+      execTime:
+      - {bcet: 1704, wcet: 2435}
+      priority: 5
+      predecessors:
+        finishBefore:
+        - {id: S2}
+    - id: S6
+      execTime:
+      - {bcet: 271, wcet: 387}
+      priority: 5
+      predecessors:
+        finishBefore:
+        - {id: S2}
+    - id: S7
+      execTime:
+      - {bcet: 677, wcet: 967}
+      priority: 5
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S8
+      execTime:
+      - {bcet: 1068, wcet: 1526}
+      priority: 5
+      predecessors:
+        finishBefore:
+        - {id: S9}
+        - {id: S10}
+    - id: S9
+      execTime:
+      - {bcet: 832, wcet: 1189}
+      priority: 5
+      predecessors:
+        finishBefore:
+        - {id: S7}
+        - {id: S2}
+    - id: S10
+      execTime:
+      - {bcet: 1170, wcet: 1672}
+      priority: 5
+      predecessors:
+        finishBefore:
+        - {id: S7}
+  - id: T7
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 55000, max: 55000}
+    releaseJitter: 0
+    deadline: 55000
+    segments:
+    - id: S0
+      execTime: 
+      - {bcet: 75, wcet: 108}
+      priority: 6
+    - id: S1
+      execTime:
+      - {bcet: 43, wcet: 62}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S3}
+        - {id: S7}
+        - {id: S9}
+        - {id: S0}
+        - {id: S6}
+    - id: S2
+      execTime:
+      - {bcet: 52, wcet: 74}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S3
+      execTime:
+      - {bcet: 38, wcet: 54}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S4}
+        - {id: S5}
+        - {id: S6}
+        - {id: S0}
+        - {id: S2}
+        - {id: S12}
+    - id: S4
+      execTime:
+      - {bcet: 28, wcet: 40}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S2}
+    - id: S5
+      execTime:
+      - {bcet: 74, wcet: 106}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S2}
+    - id: S6
+      execTime:
+      - {bcet: 37, wcet: 53}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S2}
+    - id: S7
+      execTime:
+      - {bcet: 31, wcet: 45}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S8
+      execTime:
+      - {bcet: 66, wcet: 95}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S9
+      execTime:
+      - {bcet: 5, wcet: 7}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S10}
+        - {id: S11}
+        - {id: S12}
+    - id: S10
+      execTime:
+      - {bcet: 46, wcet: 66}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S8}
+        - {id: S0}
+    - id: S11
+      execTime:
+      - {bcet: 34, wcet: 49}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S8}
+    - id: S12
+      execTime:
+      - {bcet: 87, wcet: 125}
+      priority: 6
+      predecessors:
+        finishBefore:
+        - {id: S8}
+  - id: T8
+    arrival: {min: 0, max: 0}
+    interarrival: {min: 220000, max: 220000}
+    releaseJitter: 0
+    deadline: 220000
+    segments:
+    - id: S0
+      execTime: 
+      - {bcet: 432, wcet: 617}
+      priority: 7
+    - id: S1
+      execTime:
+      - {bcet: 216, wcet: 308}
+      priority: 7
+      predecessors:
+        finishBefore:
+        - {id: S3}
+        - {id: S7}
+        - {id: S10}
+    - id: S2
+      execTime:
+      - {bcet: 202, wcet: 289}
+      priority: 7
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S3
+      execTime:
+      - {bcet: 370, wcet: 529}
+      priority: 7
+      predecessors:
+        finishBefore:
+        - {id: S4}
+        - {id: S5}
+    - id: S4
+      execTime:
+      - {bcet: 192, wcet: 274}
+      priority: 7
+      predecessors:
+        finishBefore:
+        - {id: S2}
+        - {id: S0}
+    - id: S5
+      execTime:
+      - {bcet: 186, wcet: 266}
+      priority: 7
+      predecessors:
+        finishBefore:
+        - {id: S2}
+        - {id: S0}
+    - id: S6
+      execTime:
+      - {bcet: 235, wcet: 335}
+      priority: 7
+      predecessors:
+        finishBefore:
+        - {id: S0}
+    - id: S7
+      execTime:
+      - {bcet: 454, wcet: 649}
+      priority: 7
+      predecessors:
+        finishBefore:
+        - {id: S8}
+        - {id: S9}
+    - id: S8
+      execTime:
+      - {bcet: 323, wcet: 462}
+      priority: 7
+      predecessors:
+        finishBefore:
+        - {id: S6}
+    - id: S9
+      execTime:
+      - {bcet: 439, wcet: 627}
+      priority: 7
+      predecessors:
+        finishBefore:
+        - {id: S6}
+        - {id: S2}
+    - id: S10
+      execTime:
+      - {bcet: 53, wcet: 75}
+      priority: 7
+      predecessors:
+        finishBefore:
+        - {id: S0}
