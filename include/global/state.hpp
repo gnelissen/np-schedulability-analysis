@@ -65,6 +65,8 @@ namespace NP {
 			Subtask_start_times subtask_start_times;
 			// subtask_release_times holds the release times of the last job released by every subtask
 			Subtask_arrival_times subtask_release_times;
+			// subtask_ready_times holds the ready times of the last job released by every subtask
+			Subtask_arrival_times subtask_ready_times;
 
 			typedef Time Priority;
 			// for each job `j` in `jobs_with_pending_succ`, `ready_successor_jobs_prio` contains the highest-priority job that is certainly ready right after `j` completes its execution
@@ -83,6 +85,7 @@ namespace NP {
 				, subtask_finish_times{ state_space_data.num_tasks() }
 				, subtask_start_times{ state_space_data.num_tasks() }
 				, subtask_release_times{ state_space_data.num_tasks() }
+				, subtask_ready_times{ state_space_data.num_tasks() }
 			{
 				assert(core_avail.size() > 0);
 				for (int i = 0; i < state_space_data.num_tasks(); i++) {
@@ -98,6 +101,7 @@ namespace NP {
 						subtask_release_times[i].push_back(r);
 						earliest_certain_job_disptach = std::min(earliest_certain_job_disptach, r.max());
 					}
+					subtask_ready_times[i] = subtask_release_times[i];
 				}
 			}
 
@@ -114,6 +118,7 @@ namespace NP {
 				: subtask_finish_times{ from.subtask_finish_times }
 				, subtask_start_times{ from.subtask_start_times }
 				, subtask_release_times{ from.subtask_release_times }
+				, subtask_ready_times{ from.subtask_ready_times }
 			{
 				const Task<Time>& t = state_space_data.tasks[j.task_id()];
 				const std::vector<Successors>& successors = t.get_successors();
@@ -132,7 +137,7 @@ namespace NP {
 				update_rel_start_and_finish_times(from, j, t, start_times, finish_times);
 
 				// NOTE: must be done after the finish times and core availabilities have been updated
-				update_earliest_certain_job_dispatch(ready_subtasks, state_space_data.tasks);
+				update_ready_times_and_certain_job_dispatch(ready_subtasks, state_space_data.tasks);
 
 				update_ready_successors_prios(from, t, j, finish_times, scheduled_subtasks);
 
@@ -162,6 +167,7 @@ namespace NP {
 						subtask_release_times[i][s.id()] = r;
 						earliest_certain_job_disptach = std::min(earliest_certain_job_disptach, r.max());
 					}
+					subtask_ready_times[i] = subtask_release_times[i];
 				}
 			}
 
@@ -178,6 +184,7 @@ namespace NP {
 				subtask_finish_times = from.subtask_finish_times;
 				subtask_start_times = from.subtask_start_times;
 				subtask_release_times = from.subtask_release_times;
+				subtask_ready_times = from.subtask_ready_times;
 
 				const Task<Time>& t = state_space_data.tasks[j.task_id()];
 				const std::vector<Successors>& successors = t.get_successors();
@@ -198,7 +205,7 @@ namespace NP {
 				update_rel_start_and_finish_times(from, j, t, start_times, finish_times);
 
 				// NOTE: must be done after the finish times and core availabilities have been updated
-				update_earliest_certain_job_dispatch(ready_subtasks, state_space_data.tasks);
+				update_ready_times_and_certain_job_dispatch(ready_subtasks, state_space_data.tasks);
 
 				ready_successors_prios.clear();
 				update_ready_successors_prios(from, t, j, finish_times, scheduled_subtasks);
@@ -237,6 +244,12 @@ namespace NP {
 			Interval<Time> get_release_times(Task_index i, Subtask_index j) const
 			{
 				return subtask_release_times[i][j];
+			}
+
+			// return the ready time interval of the next job of subtask `j` 
+			Interval<Time> get_ready_times(Task_index i, Subtask_index j) const
+			{
+				return subtask_ready_times[i][j];
 			}
 
 			Subtask_ref get_next_dispatched_job_min_priority() const
@@ -451,7 +464,7 @@ namespace NP {
 			}
 
 			// update the core availability resulting from scheduling subtask j on m cores in state 'from'
-			void update_core_avail(const Schedule_state& from, const Subtask<Time>& j, int n_prec, 
+			void update_core_avail(const Schedule_state& from, const Subtask<Time>& j, unsigned int n_prec, 
 				const Interval<Time> start_times, const Interval<Time> finish_times, const unsigned int m)
 			{
 				int n_cores = from.core_avail.size();
@@ -488,7 +501,7 @@ namespace NP {
 					if (!eft_added_to_pa && eft < from.core_avail[i].min())
 					{
 						// add the finish time of j ncores times since it runs on ncores
-						for (int p = 0; p < m; p++) {
+						for (unsigned int p = 0; p < m; p++) {
 							pa[pa_idx] = eft; pa_idx++; //pa.push_back(eft);
 						}
 						eft_added_to_pa = true;
@@ -496,7 +509,7 @@ namespace NP {
 					pa[pa_idx] = std::max(est, from.core_avail[i].min()); pa_idx++; //pa.push_back(std::max(est, from.core_avail[i].min()));
 					if (!lft_added_to_ca && lft < from.core_avail[i].max()) {
 						// add the finish time of j ncores times since it runs on ncores
-						for (int p = 0; p < m; p++) {
+						for (unsigned int p = 0; p < m; p++) {
 							ca[ca_idx] = lft; ca_idx++; //ca.push_back(lft);
 						}
 						lft_added_to_ca = true;
@@ -505,13 +518,13 @@ namespace NP {
 				}
 				if (!eft_added_to_pa) {
 					// add the finish time of j ncores times since it runs on ncores
-					for (int p = 0; p < m; p++) {
+					for (unsigned int p = 0; p < m; p++) {
 						pa[pa_idx] = eft; pa_idx++; //pa.push_back(eft);
 					}
 				}
 				if (!lft_added_to_ca) {
 					// add the finish time of j ncores times since it runs on ncores
-					for (int p = 0; p < m; p++) {
+					for (unsigned int p = 0; p < m; p++) {
 						ca[ca_idx] = lft; ca_idx++; //ca.push_back(lft);
 					}
 				}
@@ -546,17 +559,18 @@ namespace NP {
 
 				// jobs that were disptached in the past must have started 
 				// at the latest when our new job starts executing
-				for (int i = 0; i++; i < subtask_start_times.size())
+				for (int i = 0; i < subtask_start_times.size(); ++i)
 				{
-					for (Interval<Time>& st : subtask_start_times[i])
+					for (Interval<Time>& st : subtask_start_times[i]) {
 						st.upper_bound(lst);
+					}
 				}
 
 				// if there is a single core, then we know that 
 				// jobs that were disptached in the past cannot have 
 				// finished later than when our new job starts executing
 				if (core_avail.size() == 1) {
-					for (int i = 0; i++; i < subtask_finish_times.size())
+					for (int i = 0; i < subtask_finish_times.size(); ++i)
 					{
 						for (Interval<Time>& ft : subtask_finish_times[i])
 							ft.upper_bound(lst);
@@ -564,8 +578,40 @@ namespace NP {
 				}
 			}
 
+			// returns the ready time interval of certainly ready subtask `j`
+			Interval<Time> ready_time(const Subtask<Time>& j, const Task_set& tasks) const
+			{
+				Task_index t_id = j.task_id();
+				const Task<Time>& task = tasks[t_id];
+
+				Interval<Time> r = subtask_release_times[t_id][j.id()];
+				const auto& predecessors = task.get_predecessors_of(j.id());
+				for (const auto& pred : predecessors.start_before_start)
+				{
+					const Interval<Time>& st = subtask_start_times[t_id][pred.subtask];
+					r.lower_bound(st.min() + pred.delay.min());
+					r.extend_to(st.max() + pred.delay.max());
+				}
+				for (const auto& pred : predecessors.finish_before_start)
+				{
+					const Interval<Time>& ft = subtask_finish_times[t_id][pred.subtask];
+					r.lower_bound(ft.min() + pred.delay.min());
+					r.extend_to(ft.max() + pred.delay.max());
+				}
+				for (const auto& pred : predecessors.exclusions)
+				{
+					const Interval<Time>& ft = subtask_finish_times[t_id][pred.subtask];
+					if (ft.max() > 0) {
+						r.lower_bound(ft.min() + pred.delay.min());
+						r.extend_to(ft.max() + pred.delay.max());
+					}
+				}
+
+				return r;
+			}
+
 			//calculate the earliest time a job with precedence constraints will become ready to dispatch
-			void update_earliest_certain_job_dispatch(
+			void update_ready_times_and_certain_job_dispatch(
 				const std::vector<std::vector<Subtask_ref>>& ready_subtasks,
 				const Task_set& tasks)
 			{
@@ -574,27 +620,12 @@ namespace NP {
 				for (int i = 0; i < ready_subtasks.size(); i++)
 				{
 					for (Subtask_ref rj : ready_subtasks[i]) {
+						subtask_ready_times[i][rj->id()] = ready_time(*rj, tasks);
 						Time avail = core_avail[rj->get_min_parallelism() - 1].max();
-						Time ready_time = std::max(avail, subtask_release_times[rj->task_id()][rj->id()].max());
-						const Predecessors& predecessors = tasks[i].get_predecessors_of(rj->id());
-						for (const auto& pred : predecessors.start_before_start)
-						{
-							Time lst = subtask_start_times[i][pred.subtask].max();
-							ready_time = std::max(ready_time, lst + pred.delay.max());
-						}
-						for (const auto& pred : predecessors.finish_before_start)
-						{
-							Time lft = subtask_finish_times[i][pred.subtask].max();
-							ready_time = std::max(ready_time, lft + pred.delay.max());
-						}
-						for (const auto& pred : predecessors.exclusions)
-						{
-							Time lft = subtask_finish_times[i][pred.subtask].max();
-							if (lft > 0)
-								ready_time = std::max(ready_time, lft + pred.delay.max());
-						}
+						Time cert_dispatch_time = std::max(avail, subtask_ready_times[i][rj->id()].max());
+						
 						earliest_certain_job_disptach =
-							std::min(earliest_certain_job_disptach, ready_time);
+							std::min(earliest_certain_job_disptach, cert_dispatch_time);
 					}
 				}
 			}

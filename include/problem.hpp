@@ -78,6 +78,7 @@ namespace NP {
 		Analysis_options()
 		: timeout(0)
 		, max_depth(0)
+		, l_obs_window(0)
 		, early_exit(true)
 		, be_naive(false)
 		, merge_conservative(false)

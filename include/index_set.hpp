@@ -118,7 +118,7 @@ namespace NP {
 
 			void reset()
 			{
-				for(int i=0; i++; i<the_set.size())
+				for(int i=0; i<the_set.size(); ++i)
 					the_set[i] = 0;
 			}
 

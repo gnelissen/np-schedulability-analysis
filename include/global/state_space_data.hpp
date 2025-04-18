@@ -66,46 +66,6 @@ namespace NP {
 				return abort_actions[j];//[t][j]
 			}
 
-			// returns the ready time interval of `j` in `s`
-			// assumes all predecessors of j are dispatched
-			Interval<Time> ready_times(const State& s, const Subtask<Time>& j) const
-			{
-				Task_index t_id = j.task_id();
-				const Task<Time>& task = tasks[t_id];
-
-				Interval<Time> r = s.get_release_times(t_id, j.id());
-				const auto& predecessors = task.get_predecessors_of(j.id());
-				for (const auto& pred : predecessors.start_before_start)
-				{
-					Interval<Time> st = s.get_start_times(t_id, pred.subtask);
-					r.lower_bound(st.min() + pred.delay.min());
-					r.extend_to(st.max() + pred.delay.max());
-				}
-				for (const auto& pred : predecessors.finish_before_start)
-				{
-					Interval<Time> ft = s.get_finish_times(t_id, pred.subtask);
-					r.lower_bound(ft.min() + pred.delay.min());
-					r.extend_to(ft.max() + pred.delay.max());
-				}
-				for (const auto& pred : predecessors.exclusions)
-				{
-					Interval<Time> ft = s.get_finish_times(t_id, pred.subtask);
-					if (ft.min() > 0) {
-						r.lower_bound(ft.min() + pred.delay.min());
-						r.extend_to(ft.max() + pred.delay.max());
-					}
-				}
-
-				return r;
-			}
-
-			// returns the earliest time at which `j` may become ready in `s`
-			// assumes all predecessors of `j` are completed
-			Time earliest_ready_time(const State& s, const Subtask<Time>& j) const
-			{
-				return ready_times(s, j).min();
-			}
-
 			// This function assumes `j` is already dispatched in `s`.
 			// It then checks if the subtask `j` certainly completed its execution in `s`
 			bool is_cert_finished(const Subtask<Time>& j, const Node& n, const State& s) const
@@ -254,7 +214,7 @@ namespace NP {
 				const Subtask<Time>& reference_subtask,
 				const unsigned int ncores
 			) const {
-				auto ready_min = earliest_ready_time(s, reference_subtask);
+				auto ready_min = s.get_ready_times(reference_subtask.task_id(), reference_subtask.id()).min();
 				Time latest_ready_high = Time_model::constants<Time>::infinity();
 
 				// a higer priority successor job cannot be ready before 

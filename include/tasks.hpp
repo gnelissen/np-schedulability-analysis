@@ -238,6 +238,7 @@ namespace NP {
 					if (s.subtask == id)
 						return true;
 				}
+				return false;
 			}
 		};
 	    struct Predecessors {
@@ -270,6 +271,7 @@ namespace NP {
 					if (s.subtask == id)
 						return true;
 				}
+				return false;
 			}
 	    };
 		
@@ -433,7 +435,7 @@ namespace NP {
 
 		virtual const char* what() const noexcept override
 		{
-			return ((std::string)("invalid job reference: ") + ref).c_str();
+			return "invalid subtask reference";
 		}
 
 	};

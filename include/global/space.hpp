@@ -615,7 +615,7 @@ namespace NP {
 				const State& s, const Subtask<Time>& j, const Time t_wc, const Time t_high,
 				const Time t_avail, const unsigned int ncores = 1) const
 			{
-				auto rt = state_space_data.earliest_ready_time(s, j);
+				auto rt = s.get_ready_times(j.task_id(), j.id()).min();
 				auto at = s.core_availability(ncores).min();
 				Time est = std::max(rt, at);
 
