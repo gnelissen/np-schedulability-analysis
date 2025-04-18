@@ -209,25 +209,29 @@ namespace NP {
 					// - j_high is ready when j_low becomes ready, so the assumption that j_low is dispatched next must be false, or
 					// - something else causes j_high to become ready later than j_low, so this constraint is not important
 					// Either way, this constraint can be disregarded.
-					bool can_disregard = false;
-					for (const auto& pred_j_low : predecessors_j_low.finish_before_start) {
-						// Note that the condition `susp_max(j_pred -> j_high) <= susp_min(j_pred -> j_low)` will be true if and only if there
-						// exists a constraint from j_pred to j_low whose *minimum* suspension is at least `susp_max(j_pred -> j_high)`. So we can
-						// stop searching as soon as we find one such constraint.
-						if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() >= pred_j_high.delay.max()) {
-							can_disregard = true;
-							break;
+					//
+					// Note that j_pred can be a predecessor of both j_high and j_low only if j_high and j_low are subtasks of the same task.
+					if (j_high.task_id() == j_low.task_id()) {
+						bool can_disregard = false;
+						for (const auto& pred_j_low : predecessors_j_low.finish_before_start) {
+							// Note that the condition `susp_max(j_pred -> j_high) <= susp_min(j_pred -> j_low)` will be true if and only if there
+							// exists a constraint from j_pred to j_low whose *minimum* suspension is at least `susp_max(j_pred -> j_high)`. So we can
+							// stop searching as soon as we find one such constraint.
+							if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() >= pred_j_high.delay.max()) {
+								can_disregard = true;
+								break;
+							}
 						}
-					}
-					if (can_disregard) {
-						// Disregards *this* constraint, but other constraints from j_pred to j_high in predecessors_suspensions[j_high.get_job_index()]
-						// will be evaluated in their own iteration of this loop.
-						//
-						// Note that only the constraint with the largest *maximum* suspension from j_pred to j_high is important for
-						// the computation of susp_max(j_pred -> j_high), and that this is also the only constraint from j_pred to j_high that could
-						// affect the final value of latest_ready_high. Therefor, it is irrelevant whether other constraints from j_pred to j_high
-						// are disregarded.
-						continue;
+						if (can_disregard) {
+							// Disregards *this* constraint, but other constraints from j_pred to j_high in predecessors_suspensions[j_high.get_job_index()]
+							// will be evaluated in their own iteration of this loop.
+							//
+							// Note that only the constraint with the largest *maximum* suspension from j_pred to j_high is important for
+							// the computation of susp_max(j_pred -> j_high), and that this is also the only constraint from j_pred to j_high that could
+							// affect the final value of latest_ready_high. Therefor, it is irrelevant whether other constraints from j_pred to j_high
+							// are disregarded.
+							continue;
+						}
 					}
 
 					Interval<Time> ft = s.get_finish_times(j_pred.task_id(), j_pred.id());
