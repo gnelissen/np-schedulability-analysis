@@ -1,7 +1,6 @@
 #ifndef ABORT_HANDLER_HPP
 #define ABORT_HANDLER_HPP
 
-#include "jobs.hpp"
 
 namespace NP {
 
@@ -10,7 +9,7 @@ namespace NP {
 
 	public:
 
-		Abort_action(JobID id,
+		/*Abort_action(JobID id,
 		             Interval<Time> trigger_time,
 		             Interval<Time> cleanup_cost)
 		: job_id(id)
@@ -47,10 +46,10 @@ namespace NP {
 	private:
 		JobID job_id;
 		Interval<Time> trigger_time;
-		Interval<Time> cleanup_cost;
+		Interval<Time> cleanup_cost;*/
 	};
 
-	class InvalidAbortParameter : public std::exception
+	/*class InvalidAbortParameter : public std::exception
 	{
 		public:
 
@@ -77,7 +76,7 @@ namespace NP {
 			    action.latest_trigger_time() < job.latest_arrival())
 				throw InvalidAbortParameter(action.get_id());
 		}
-	}
+	}*/
 
 
 }

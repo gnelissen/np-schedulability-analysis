@@ -40,7 +40,6 @@ namespace NP {
 
 			typedef Scheduling_problem<Time> Problem;
 			typedef typename Scheduling_problem<Time>::Task_set Task_set;
-			typedef typename Scheduling_problem<Time>::Precedence_constraints Precedence_constraints;
 			typedef typename Scheduling_problem<Time>::Abort_actions Abort_actions;
 			typedef Schedule_state<Time> State;
 			typedef typename std::vector<Interval<Time>> CoreAvailability;
@@ -225,7 +224,6 @@ namespace NP {
 #else
 			typedef std::unordered_map<hash_value_t, Node_refs> Nodes_map;
 #endif
-			typedef const Job<Time>* Job_ref;
 			typedef const Subtask<Time>* Subtask_ref;
 
 			// Similar to uni/space.hpp, make Response_times a vector of intervals.
@@ -554,11 +552,6 @@ namespace NP {
 					aborted = true;
 			}
 
-			bool unfinished(const Node& n, const Job<Time>& j) const
-			{
-				return n.job_not_dispatched(j.get_job_index());
-			}
-
 			// Check if any job is guaranteed to miss its deadline in any state in node new_n
 			void check_for_deadline_misses(const Node& old_n, const Node& new_n)
 			{
@@ -648,9 +641,9 @@ namespace NP {
 				return a.latest_trigger_time() + a.maximum_cleanup_cost();
 			}
 
-			Interval<Time> calculate_abort_time(const Job<Time>& j, Time est, Time lst, Time eft, Time lft)
+			Interval<Time> calculate_abort_time(const Subtask<Time>& j, Time est, Time lst, Time eft, Time lft)
 			{
-				auto j_idx = j.get_job_index();
+				/*auto j_idx = j.get_job_index();
 				auto abort_action = state_space_data.abort_action_of(j_idx);
 				if (abort_action) {
 					auto lt = abort_action->latest_trigger_time();
@@ -668,7 +661,7 @@ namespace NP {
 						return Interval<Time>{ std::min(eft, eat), std::min(lft, lat) };
 					}
 				}
-				else {
+				else*/ {
 					// compute range of possible finish times
 					return Interval<Time>{ eft, lft };
 				}

@@ -78,7 +78,7 @@ static Analysis_result analyze(
 
 
 	// Parse input files and create NP scheduling problem description
-    typename NP::Task<Time>::Task_set tasks = NP::parse_tasks_file<Time>(in);
+	typename NP::Task<Time>::Task_set tasks = NP::parse_tasks_file<Time>(in);
 	NP::Scheduling_problem<Time> problem{
 	    tasks,
 		num_processors};
@@ -248,12 +248,6 @@ static void process_file(const std::string& fname)
 				  << fname
 				  << std::endl;
 		exit(3);
-	} catch (NP::InvalidPrecParameter& ex) {
-		std::cerr << "Invalid self - suspending parameter : job "
-				  << ex.ref.job << " of task " << ex.ref.task
-				  << " has an invalid self-suspending time"
-				  << std::endl;
-		exit(5);
 	} catch (std::exception& ex) {
 		std::cerr << fname << ": '" << ex.what() << "'" << std::endl;
 		exit(1);
@@ -408,7 +402,6 @@ int main(int argc, char** argv)
 			std::cerr << "Error: invalid observation window length argument\n" << std::endl;
 			return 1;
 		}
-		length_obs_window -= 1;
 	}
 
 	want_multiprocessor = options.is_set_by_user("num_processors");

@@ -11,7 +11,6 @@
 #include "config.h"
 #include "cache.hpp"
 #include "index_set.hpp"
-#include "jobs.hpp"
 #include "statistics.hpp"
 #include "util.hpp"
 #include "global/state_space_data.hpp"
@@ -24,9 +23,6 @@
 namespace NP {
 
 	namespace Global {
-
-		typedef Index_set Job_set;
-		typedef std::vector<Job_index> Job_precedence_set;
 
 		template<class Time> class Schedule_state
 		{
@@ -384,14 +380,14 @@ namespace NP {
 					stream << "[" << a.from() << ", " << a.until() << "] ";
 				stream << "(";
 				for (const auto& rj : s.certain_subtasks)
-					stream << rj.task << "," << rj.subtask << "; ";
+					stream << rj.name << "; ";
 				stream << ") " << ")";
 				stream << " @ " << &s;
 				return stream;
 			}
 
 			void print_vertex_label(std::ostream& out,
-				const typename Job<Time>::Job_set& jobs) const
+				const typename Task<Time>::Task_set& tasks) const
 			{
 				for (const auto& a : core_avail)
 					out << "[" << a.from() << ", " << a.until() << "] ";
@@ -401,8 +397,7 @@ namespace NP {
 				for (const auto& rj : certain_subtasks) {
 					if (!first)
 						out << ", ";
-					out << "T" << rj.task
-						<< "S" << rj.subtask << ":"
+					out << rj.name << ":"
 						<< rj.finish_time.min() << "-" << rj.finish_time.max();
 					first = false;
 				}

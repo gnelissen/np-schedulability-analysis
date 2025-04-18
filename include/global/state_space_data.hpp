@@ -28,7 +28,6 @@ namespace NP {
 			typedef Scheduling_problem<Time> Problem;
 			typedef typename Scheduling_problem<Time>::Task_set Task_set;
 			typedef const Subtask<Time>* Subtask_ref;
-			typedef typename Scheduling_problem<Time>::Precedence_constraints Precedence_constraints;
 			typedef typename Scheduling_problem<Time>::Abort_actions Abort_actions;
 			typedef Schedule_state<Time> State;
 			typedef Schedule_node<Time> Node;

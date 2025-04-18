@@ -2,8 +2,6 @@
 #define NP_PROBLEM_HPP
 
 #include "tasks.hpp"
-#include "jobs.hpp"
-#include "precedence.hpp"
 #include "aborts.hpp"
 
 namespace NP {
@@ -14,7 +12,6 @@ namespace NP {
 
 		typedef typename Task<Time>::Task_set Task_set;
 		typedef typename std::vector<Abort_action<Time>> Abort_actions;
-		typedef typename std::vector<Precedence_constraint<Time>> Precedence_constraints;
 
 		// ** Description of the workload:
 		// (1) a set of recurrent tasks

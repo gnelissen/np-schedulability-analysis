@@ -6,8 +6,6 @@
 
 #include "interval.hpp"
 #include "time.hpp"
-#include "jobs.hpp"
-#include "precedence.hpp"
 #include "aborts.hpp"
 #include "yaml-cpp/yaml.h"
 
