@@ -210,7 +210,7 @@ namespace NP {
 				ready_successors_prios.clear();
 				update_ready_successors_prios(from, t, j, finish_times, scheduled_subtasks);
 
-				//assert(ready_successor_jobs_prio.size() <= ready_succ_jobs.size());
+				assert(ready_successors_prios.size() <= ready_subtasks.size());
 
 				DM("*** new state: constructed " << *this << std::endl);
 			}

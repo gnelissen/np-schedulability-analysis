@@ -127,8 +127,7 @@ namespace NP {
 				a_max{ Time_model::constants<Time>::infinity() },
 				ready_subtasks(from.ready_subtasks.size())
 			{
-				scheduled_subtasks.reserve(state_space_data.num_tasks());
-				std::copy(from.scheduled_subtasks.begin(), from.scheduled_subtasks.end(), std::back_inserter(scheduled_subtasks));
+				scheduled_subtasks = from.scheduled_subtasks; 
 				scheduled_subtasks[subtsk.task_id()].add(subtsk.id());
 
 				update_ready_subtasks(from, subtsk, state_space_data.tasks);
@@ -163,7 +162,7 @@ namespace NP {
 			)
 			{
 				states.clear();
-				std::copy(from.scheduled_subtasks.begin(), from.scheduled_subtasks.end(), scheduled_subtasks.begin());
+				scheduled_subtasks = from.scheduled_subtasks;
 				scheduled_subtasks[subtsk.task_id()].add(subtsk.id());
 				lookup_key = from.next_key(subtsk);
 				num_cpus = from.num_cpus;
@@ -423,8 +422,8 @@ namespace NP {
 				}
 
 				// if all subtasks have been dispatched, we release a new instance of the task
-				scheduled_subtasks[task_id].clear();
 				if (ready_subtasks[task_id].empty()) {
+					scheduled_subtasks[task_id].clear();
 					// if a subtask has no predecessors, it is ready
 					for (const auto& st : task.get_subtasks()) {
 						const auto& pred = task.get_predecessors_of(st.id());

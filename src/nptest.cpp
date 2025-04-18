@@ -139,7 +139,7 @@ static Analysis_result analyze(
 		space->number_of_states(),
 		space->number_of_edges(),
 		space->max_exploration_front_width(),
-		(unsigned long)(problem.tasks.size()),
+		(unsigned long)(space->evolution_exploration_front_width().size() - 1),
 		space->get_cpu_time(),
 		graph.str(),
 		rta.str(),
