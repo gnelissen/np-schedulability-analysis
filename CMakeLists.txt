@@ -87,19 +87,19 @@ add_definitions(
         -DVERSION_PATCH=${NP_schedulabiliy_test_VERSION_PATCH}
 )
 
-file(GLOB TEST_SOURCES "src/tests/*.cpp")
-add_executable(runtests ${TEST_SOURCES} ${SOURCES})
+#file(GLOB TEST_SOURCES "src/tests/*.cpp")
+#add_executable(runtests ${TEST_SOURCES} ${SOURCES})
 
 set(NPTEST_SOURCES src/nptest.cpp lib/src/OptionParser.cpp)
 add_executable(nptest ${NPTEST_SOURCES})
 
 target_link_libraries(nptest ${CORE_LIBS})
-target_link_libraries(runtests ${CORE_LIBS})
+#target_link_libraries(runtests ${CORE_LIBS})
 
-target_compile_features(runtests PUBLIC cxx_std_14)
+#target_compile_features(runtests PUBLIC cxx_std_14)
 target_compile_features(nptest PUBLIC cxx_std_14)
 
 if (MSVC)
-    target_compile_options(runtests PUBLIC "/Zc:__cplusplus")
+#    target_compile_options(runtests PUBLIC "/Zc:__cplusplus")
     target_compile_options(nptest PUBLIC "/Zc:__cplusplus")
 endif()

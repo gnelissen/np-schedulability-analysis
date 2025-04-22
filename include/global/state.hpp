@@ -337,20 +337,17 @@ namespace NP {
 				if (!can_merge_with(other, conservative, use_job_finish_times))
 					return false;
 
-				merge(other.core_avail, other.subtask_finish_times, other.certain_subtasks, other.earliest_certain_job_disptach);
+				merge(other);
 
 				DM("+++ merged " << other << " into " << *this << std::endl);
 				return true;
 			}
 
 			void merge(
-				const Core_availability& cav,
-				const Subtask_finish_times& jft,
-				const std::vector<Running_subtask>& cert_j,
-				Time ecsj_ready_time)
+				const Schedule_state<Time>& other)
 			{
 				for (int i = 0; i < core_avail.size(); i++)
-					core_avail[i] |= cav[i];
+					core_avail[i] |= other.core_avail[i];
 
 				// vector to collect joint certain jobs
 				std::vector<Running_subtask> new_cj;
@@ -358,8 +355,8 @@ namespace NP {
 				// walk both sorted job lists to see if we find matches
 				auto it = certain_subtasks.begin();
 				auto it_end = certain_subtasks.end();
-				auto jt = cert_j.begin();
-				auto jt_end = cert_j.end();
+				auto jt = other.certain_subtasks.begin();
+				auto jt_end = other.certain_subtasks.end();
 				while (it != it_end &&
 					jt != jt_end) {
 					if (it->task == jt->task && it->subtask == jt->subtask) {
@@ -377,10 +374,19 @@ namespace NP {
 				certain_subtasks.swap(new_cj);
 
 				// merge job_finish_times
-				widen_finish_times(jft);
+				widen_release_start_ready_finish_times(other);
 
 				// update certain ready time of jobs with predecessors
-				earliest_certain_job_disptach = std::max(earliest_certain_job_disptach, ecsj_ready_time);
+				earliest_certain_job_disptach = std::max(earliest_certain_job_disptach, other.earliest_certain_job_disptach);
+
+				// update minimum priority of next job dispatched
+				// Note that, according to how update_ready_successors_prios is implemented both states 
+				// must have the same set of jobs that are elible to be inserted in the list ready_successors_prios, 
+				// thus it is safe to take the job with the highest prios among those that are in that list
+				if (min_next_prio_sbtsk == NULL || 
+					other.min_next_prio_sbtsk != NULL && 
+						other.min_next_prio_sbtsk->higher_priority_than(*min_next_prio_sbtsk))
+					min_next_prio_sbtsk = other.min_next_prio_sbtsk;
 
 				DM("+++ merged (cav,jft,cert_t) into " << *this << std::endl);
 			}
@@ -634,7 +640,7 @@ namespace NP {
 			// checks that `pred` is the only predecessor of `succ` that is not certainly finished
 			// or that `succ` is the only successor of all succ's predecessors (i.e., 
 			// the sum of all the successors of all predecessors of `succ` is equal to 1)
-			bool succ_ready_right_after_pred(const Subtask<Time>&  pred, const Subtask<Time>& succ, const Interval<Time>& finish_times, const std::vector<Successors>& successors_of, const std::vector<Predecessors>& predecessors_of, const Index_set& scheduled_subtasks)
+			bool succ_ready_right_after_pred(const Task<Time>& t, const Subtask<Time>&  pred, const Subtask<Time>& succ, const Interval<Time>& finish_times, const std::vector<Successors>& successors_of, const std::vector<Predecessors>& predecessors_of, const Index_set& scheduled_subtasks)
 			{
 				Task_index t_idx = succ.task_id();
 
@@ -652,24 +658,28 @@ namespace NP {
 					Subtask_index j = p.subtask;
 					if (j != pred.id())
 					{
+						// if `succ` may not be ready right when `j` finishes, return false
+						if (p.delay.max() > 0)
+							return false;
+
 						// if `j` was not dispatched yet, then `succ` cannot be ready
-						if (!scheduled_subtasks.contains(j))
+						if(!scheduled_subtasks.contains(j))
 							return false;
 
 						//  if `j` has a single successor and zero delay between the completion of `j` and the time `succ` becomes ready, then we disregard `j` 
-						if (successors_of[j].start_after_start.size() == 1 && successors_of[j].start_after_finish.size() == 1 && p.delay.max() == 0)
+						if (successors_of[j].start_after_start.size() + successors_of[j].start_after_finish.size() == 1 && p.delay.max() == 0)
 							continue;
 
 						// if `j` is certainly finished and the max delay until `succ` is ready is certainly elapsed before `pred` is finished, then we disregard `j`
-						Interval<Time> ftimes_p = get_finish_times(t_idx, j);
-						if (ftimes_p.max() + p.delay.max() <= finish_times.min())
-							continue;
+						//Interval<Time> ftimes_p = get_finish_times(t_idx, j);
+						//if (ftimes_p.max() + p.delay.max() <= finish_times.min())
+						//	continue;
 						
 						// If at least one successor of `j` has already been dispatched, then `j` must have finished already.
 						bool is_finished = false;
 						for (const auto& succ_of_j : successors_of[j].start_after_finish)
 						{
-							if (scheduled_subtasks.contains(succ_of_j.subtask) && succ_of_j.delay.max()==0) {
+							if (scheduled_subtasks.contains(succ_of_j.subtask)) {
 								// `j` finished at the latest `succ_of_j.delay.min()` time units before `succ_of_j` starts,
 								// and `pred` finishes at the earliest at `finish_times.min()` 
 								//Interval<Time> st = get_start_times(t_idx, succ_of_j.subtask);
@@ -681,6 +691,48 @@ namespace NP {
 						}
 						if (not is_finished)
 							return false;
+					}
+					for (const auto& p : predecessors_of[succ.id()].start_before_start)
+					{
+						Subtask_index j_idx = p.subtask;
+						const Subtask<Time>& j = t.get_subtask(j_idx);
+						if (j_idx != pred.id())
+						{
+							// if `j` was not dispatched yet, then `succ` cannot be ready
+							if (p.delay.max() > j.get_cost().min() || !scheduled_subtasks.contains(j_idx))
+								return false;
+
+							// if the delay from when `j` starts to when `succ` is ready may be longer than `j` execution time,
+							// then `succ` may not be ready when `j` finishes
+							if (p.delay.max() > 0)//j.get_cost().min())
+								return false;
+
+							//  if `j` has a single successor and zero delay between the completion of `j` and the time `succ` becomes ready, then we disregard `j` 
+							if (successors_of[j_idx].start_after_start.size() + successors_of[j_idx].start_after_finish.size() == 1)
+								continue;
+
+							// if `j` is certainly finished and the max delay until `succ` is ready is certainly elapsed before `pred` is finished, then we disregard `j`
+							//Interval<Time> ftimes_p = get_finish_times(t_idx, j);
+							//if (ftimes_p.max() + p.delay.max() <= finish_times.min())
+							//	continue;
+
+							// If at least one successor of `j` has already been dispatched, then `j` must have finished already.
+							bool is_finished = false;
+							for (const auto& succ_of_j : successors_of[j_idx].start_after_finish)
+							{
+								if (scheduled_subtasks.contains(succ_of_j.subtask)) {
+									// `j` finished at the latest `succ_of_j.delay.min()` time units before `succ_of_j` starts,
+									// and `pred` finishes at the earliest at `finish_times.min()` 
+									//Interval<Time> st = get_start_times(t_idx, succ_of_j.subtask);
+									//if (st.max() - succ_of_j.delay.min() + p.delay.max() <= finish_times.min()) {
+									is_finished = true;
+									break;
+									//}
+								}
+							}
+							if (not is_finished)
+								return false;
+						}
 					}
 				}
 				return true;
@@ -708,8 +760,23 @@ namespace NP {
 					// if `succ` was not dispatched yet, can execute on a single core, is ready right after `j_dispatched` finishes, and has no other predecessor than `j_dispatched` or all other predecessors certainly finished
 					if (!scheduled_subtasks[j_task_idx].contains(succ_idx)
 						&& succ.get_min_parallelism() == 1
-						&& s_cstr.delay.max() == 0 && subtask_release_times[j_task_idx][succ_idx].max() <= j_disp_finish_times.min()
-						&& succ_ready_right_after_pred(j_dispatched, succ, j_disp_finish_times, successors_of, predecessors_of, scheduled_subtasks[j_task_idx]))
+						&& s_cstr.delay.max() == 0 && subtask_release_times[j_task_idx][succ_idx].max() <= subtask_release_times[j_task_idx][j_idx].min() + j_dispatched.get_cost().min() // j_disp_finish_times.min()
+						&& succ_ready_right_after_pred(t_dispatched, j_dispatched, succ, j_disp_finish_times, successors_of, predecessors_of, scheduled_subtasks[j_task_idx]))
+					{
+						if (sbtsk_to_insert == NULL || succ.higher_priority_than(*sbtsk_to_insert)) {
+							sbtsk_to_insert = &succ;
+						}
+					}
+				}
+				for (const auto& s_cstr : successors_of[j_idx].start_after_start) {
+					Subtask_index succ_idx = s_cstr.subtask;
+					const Subtask<Time>& succ = t_dispatched.get_subtask(succ_idx);
+
+					// if `succ` was not dispatched yet, can execute on a single core, is ready right after `j_dispatched` finishes, and has no other predecessor than `j_dispatched` or all other predecessors certainly finished
+					if (!scheduled_subtasks[j_task_idx].contains(succ_idx)
+						&& succ.get_min_parallelism() == 1
+						&& s_cstr.delay.max() == 0 && subtask_release_times[j_task_idx][succ_idx].max() <= subtask_release_times[j_task_idx][j_idx].min() + j_dispatched.get_cost().min() // j_disp_finish_times.min()
+						&& succ_ready_right_after_pred(t_dispatched, j_dispatched, succ, j_disp_finish_times, successors_of, predecessors_of, scheduled_subtasks[j_task_idx]))
 					{
 						if (sbtsk_to_insert == NULL || succ.higher_priority_than(*sbtsk_to_insert)) {
 							sbtsk_to_insert = &succ;
@@ -766,11 +833,14 @@ namespace NP {
 				return true;
 			}
 
-			void widen_finish_times(const Subtask_finish_times& from_pwj)
+			void widen_release_start_ready_finish_times(const Schedule_state<Time>& other)
 			{
 				for (int i = 0; i < subtask_finish_times.size(); i++) {
 					for (int j = 0; j < subtask_finish_times[i].size(); j++) {
-						subtask_finish_times[i][j].widen(from_pwj[i][j]);
+						subtask_release_times[i][j].widen(other.subtask_release_times[i][j]);
+						subtask_ready_times[i][j].widen(other.subtask_ready_times[i][j]);
+						subtask_start_times[i][j].widen(other.subtask_start_times[i][j]);
+						subtask_finish_times[i][j].widen(other.subtask_finish_times[i][j]);
 					}
 				}
 			}
