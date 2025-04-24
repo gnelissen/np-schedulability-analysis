@@ -34,11 +34,9 @@ namespace NP {
 			typedef typename Task<Time>::Predecessors Predecessors;
 			typedef typename Task<Time>::Successors Successors;
 
-			typedef std::vector<std::vector<Interval<Time>>> Subtask_finish_times;
-			typedef std::vector<std::vector<Interval<Time>>> Subtask_start_times;
-			typedef std::vector<std::vector<Interval<Time>>> Subtask_arrival_times;
 			typedef std::vector<Interval<Time>> Core_availability;
 			typedef Interval<unsigned int> Parallelism;
+			typedef Time Priority;
 
 			// system availability intervals
 			Core_availability core_avail;
@@ -59,16 +57,23 @@ namespace NP {
 			// imprecise set of certainly running subtasks, on how many cores they run, and when they should finish
 			std::vector<Running_subtask> certain_subtasks;
 
-			// subtask_finish_times holds the finish times of the last dispatched job of every subtask of every task
-			Subtask_finish_times subtask_finish_times;
-			// subtask_start_times holds the start times of the last dispatched job of every subtask of every task
-			Subtask_start_times subtask_start_times;
-			// subtask_release_times holds the release times of the last job released by every subtask
-			Subtask_arrival_times subtask_release_times;
-			// subtask_ready_times holds the ready times of the last job released by every subtask
-			Subtask_arrival_times subtask_ready_times;
+			struct {
+				// one single array containing all the start, release, ready and finish intervals.
+				// the other members of the struct point to subparts of the `intervals` array to be able to access them independently.
+				Interval<Time>* intervals;
+				// subtask_finish_times holds the finish times of the last dispatched job of every subtask of every task
+				Interval<Time>** subtask_finish_times;
+				// subtask_start_times holds the start times of the last dispatched job of every subtask of every task
+				Interval<Time>** subtask_start_times;
+				// subtask_release_times holds the release times of the last job released by every subtask
+				Interval<Time>** subtask_release_times;
+				// subtask_ready_times holds the ready times of the last job released by every subtask
+				Interval<Time>** subtask_ready_times;
 
-			typedef Time Priority;
+				unsigned int num_intervals;
+				unsigned int num_subtasks;
+			};			
+
 			// for each job `j` in `jobs_with_pending_succ`, `ready_successor_jobs_prio` contains the highest-priority job that is certainly ready right after `j` completes its execution
 			std::vector<Subtask_ref> ready_successors_prios;
 			// the job with a priority at least equal to that of the first job disptached after the current state
@@ -82,27 +87,45 @@ namespace NP {
 				, certain_subtasks{}
 				, earliest_certain_job_disptach{ Time_model::constants<Time>::infinity() }
 				, min_next_prio_sbtsk{ NULL }
-				, subtask_finish_times{ state_space_data.num_tasks() }
-				, subtask_start_times{ state_space_data.num_tasks() }
-				, subtask_release_times{ state_space_data.num_tasks() }
-				, subtask_ready_times{ state_space_data.num_tasks() }
 			{
-				assert(core_avail.size() > 0);
-				for (int i = 0; i < state_space_data.num_tasks(); i++) {
-					const Task<Time>& t = state_space_data.tasks[i];
+				// initialise the array of start, release, ready and finish intervals
+				num_subtasks = 0;
+				unsigned int num_tasks = state_space_data.num_tasks();
+				// count total number of subtasks
+				for (const Task<Time>& t : state_space_data.tasks)
+					num_subtasks += t.get_subtasks().size();
+				// create one interval for start, release, ready and finish times for each subtask
+				num_intervals = num_subtasks * 4;
+				intervals = new Interval<Time>[num_intervals];
+				// initialize pointers for arrays of start, release, ready and finish time intervals
+				subtask_start_times = new Interval<Time>*[num_tasks];
+				subtask_release_times = new Interval<Time>*[num_tasks];
+				subtask_ready_times = new Interval<Time>*[num_tasks];
+				subtask_finish_times = new Interval<Time>*[num_tasks];
+				unsigned int idx = 0;
+				for (unsigned int i = 0; i < num_tasks; ++i) {
+					subtask_start_times[i] = &intervals[idx];
+					subtask_release_times[i] = &intervals[num_subtasks + idx];
+					subtask_ready_times[i] = &intervals[2 * num_subtasks + idx];
+					subtask_finish_times[i] = &intervals[3 * num_subtasks + idx];
+					idx += state_space_data.tasks[i].get_subtasks().size();
+				}
 
-					subtask_finish_times[i].resize(t.num_subtasks(), Interval<Time>(Time(0), Time(0)));
-					subtask_start_times[i].resize(t.num_subtasks(), Interval<Time>(Time(0), Time(0)));
-					subtask_release_times[i].reserve(t.num_subtasks());
+				// initialize ready times and earliest_certain_job_disptach 
+				for (int i = 0; i < num_tasks; i++) {
+					const Task<Time>& t = state_space_data.tasks[i];
 					Interval<Time> release_offset = t.get_release_offset();
 					Interval<Time> release_time = Interval<Time>{ release_offset.min(), release_offset.max() + t.get_release_jitter() };
+					int j = 0;
 					for (const auto& s : t.get_subtasks()) {
 						Interval<Time> r = release_time + s.get_release_offset();
-						subtask_release_times[i].push_back(r);
+						subtask_release_times[i][j] = r;
 						earliest_certain_job_disptach = std::min(earliest_certain_job_disptach, r.max());
+						j++;
 					}
-					subtask_ready_times[i] = subtask_release_times[i];
 				}
+
+				assert(core_avail.size() > 0);
 			}
 
 			// transition: new state by scheduling a subtask 'j' in an existing state 'from'
@@ -115,11 +138,27 @@ namespace NP {
 				const std::vector< std::vector<Subtask_ref>>& ready_subtasks,
 				const State_space_data<Time>& state_space_data,
 				unsigned int ncores = 1)
-				: subtask_finish_times{ from.subtask_finish_times }
-				, subtask_start_times{ from.subtask_start_times }
-				, subtask_release_times{ from.subtask_release_times }
-				, subtask_ready_times{ from.subtask_ready_times }
 			{
+				// copy all start, release, ready and finish intervals of previous state
+				num_intervals = from.num_intervals;
+				num_subtasks = from.num_subtasks;
+				intervals = new Interval<Time>[num_intervals];
+				std::memcpy(intervals, from.intervals, num_intervals * sizeof(Interval<Time>));
+				// initiale pointers
+				int num_tasks = state_space_data.tasks.size();
+				subtask_start_times = new Interval<Time>*[num_tasks];
+				subtask_release_times = new Interval<Time>*[num_tasks];
+				subtask_ready_times = new Interval<Time>*[num_tasks];
+				subtask_finish_times = new Interval<Time>*[num_tasks];
+				unsigned int idx = 0;
+				for (int i = 0; i < num_tasks; ++i) {
+					subtask_start_times[i] = &intervals[idx];
+					subtask_release_times[i] = &intervals[num_subtasks + idx];
+					subtask_ready_times[i] = &intervals[2 * num_subtasks + idx];
+					subtask_finish_times[i] = &intervals[3 * num_subtasks + idx];
+					idx += state_space_data.tasks[i].get_subtasks().size();
+				}
+
 				const Task<Time>& t = state_space_data.tasks[j.task_id()];
 				const std::vector<Successors>& successors = t.get_successors();
 				const std::vector<Predecessors>& predecessors = t.get_predecessors();
@@ -155,19 +194,23 @@ namespace NP {
 				ready_successors_prios.clear();
 				assert(core_avail.size() > 0);
 
-				for (int i = 0; i < state_space_data.num_tasks(); i++) {
-					const Task<Time>& t = state_space_data.tasks[i];
+				// reset all start, release, ready and finish intervals to [0,0]
+				for (int i = 0; i < num_intervals; i++)
+					intervals[i].reset();
 
-					subtask_finish_times[i].assign( t.num_subtasks(), Interval<Time>(Time(0), Time(0)) );
-					subtask_start_times[i].assign( t.num_subtasks(), Interval<Time>(Time(0), Time(0)) );
+				// initialize ready times and earliest_certain_job_disptach 
+				int num_tasks = state_space_data.tasks.size();
+				for (int i = 0; i < num_tasks; i++) {
+					const Task<Time>& t = state_space_data.tasks[i];
 					Interval<Time> release_offset = t.get_release_offset();
 					Interval<Time> release_time = Interval<Time>{ release_offset.min(), release_offset.max() + t.get_release_jitter() };
+					int j = 0;
 					for (const auto& s : t.get_subtasks()) {
 						Interval<Time> r = release_time + s.get_release_offset();
-						subtask_release_times[i][s.id()] = r;
+						subtask_release_times[i][j] = r;
 						earliest_certain_job_disptach = std::min(earliest_certain_job_disptach, r.max());
+						j++;
 					}
-					subtask_ready_times[i] = subtask_release_times[i];
 				}
 			}
 
@@ -181,10 +224,8 @@ namespace NP {
 				const State_space_data<Time>& state_space_data,
 				unsigned int ncores = 1)
 			{
-				subtask_finish_times = from.subtask_finish_times;
-				subtask_start_times = from.subtask_start_times;
-				subtask_release_times = from.subtask_release_times;
-				subtask_ready_times = from.subtask_ready_times;
+				// copy all start, release, ready and finish intervals of previous state
+				std::memcpy(intervals, from.intervals, num_intervals * sizeof(Interval<Time>));
 
 				const Task<Time>& t = state_space_data.tasks[j.task_id()];
 				const std::vector<Successors>& successors = t.get_successors();
@@ -213,6 +254,14 @@ namespace NP {
 				assert(ready_successors_prios.size() <= ready_subtasks.size());
 
 				DM("*** new state: constructed " << *this << std::endl);
+			}
+
+			~Schedule_state() {
+				delete[] intervals;
+				delete[] subtask_start_times;
+				delete[] subtask_release_times;
+				delete[] subtask_ready_times;
+				delete[] subtask_finish_times;
 			}
 
 			Interval<Time> core_availability(unsigned long p = 1) const
@@ -310,7 +359,7 @@ namespace NP {
 				if (core_avail_overlap(other.core_avail, conservative, other_in_this))
 				{
 					if (use_job_finish_times)
-						return check_finish_times_overlap(other.subtask_finish_times, conservative, other_in_this);
+						return check_finish_times_overlap(other.subtask_finish_times[0], conservative, other_in_this);
 					else
 						return true;
 				}
@@ -318,7 +367,7 @@ namespace NP {
 					return false;
 			}
 
-			bool can_merge_with(const Core_availability& cav, const Subtask_finish_times& jft, bool conservative, bool use_job_finish_times = false) const
+			bool can_merge_with(const Core_availability& cav, const Interval<Time>* jft, bool conservative, bool use_job_finish_times = false) const
 			{
 				if (core_avail_overlap(cav, conservative))
 				{
@@ -564,24 +613,18 @@ namespace NP {
 				// record the release time of the next job of 'j'
 				subtask_release_times[j.task_id()][j.id()] += t.get_inter_arrival();
 
-				// jobs that were disptached in the past must have started 
-				// at the latest when our new job starts executing
-				for (int i = 0; i < subtask_start_times.size(); ++i)
+				Interval<Time>* st = subtask_start_times[0];
+				Interval<Time>* ft = subtask_finish_times[0];
+				for (int i = 0; i < num_subtasks; ++i)
 				{
-					for (Interval<Time>& st : subtask_start_times[i]) {
-						st.upper_bound(lst);
-					}
-				}
-
-				// if there is a single core, then we know that 
-				// jobs that were disptached in the past cannot have 
-				// finished later than when our new job starts executing
-				if (core_avail.size() == 1) {
-					for (int i = 0; i < subtask_finish_times.size(); ++i)
-					{
-						for (Interval<Time>& ft : subtask_finish_times[i])
-							ft.upper_bound(lst);
-					}
+					// jobs that were disptached in the past must have started 
+					// at the latest when our new job starts executing
+					st[i].upper_bound(lst);
+					// if there is a single core, then we know that 
+					// jobs that were disptached in the past cannot have 
+					// finished later than when our new job starts executing
+					if (single_core)
+						ft[i].upper_bound(lst);
 				}
 			}
 
@@ -814,20 +857,19 @@ namespace NP {
 			}
 
 			// Check whether the job_finish_times overlap.
-			bool check_finish_times_overlap(const Subtask_finish_times& other_ft, bool conservative = false, const bool other_in_this = false) const
+			bool check_finish_times_overlap(const Interval<Time>* other_ft, bool conservative = false, const bool other_in_this = false) const
 			{
-				for (int i = 0; i < subtask_finish_times.size(); i++) {
-					for (int j = 0; j < subtask_finish_times[i].size(); j++) {
-						if (conservative) {
-							if (other_in_this == false && !other_ft[i][j].contains(subtask_finish_times[i][j]))
-								return false; // not all the finish time intervals of this are within those of other
-							else if (other_in_this == true && !subtask_finish_times[i][j].contains(other_ft[i][j]))
-								return false; // not all the finish time intervals of other are within those of this
-						}
-						else {
-							if (!other_ft[i][j].intersects(subtask_finish_times[i][j]))
-								return false;
-						}
+				Interval<Time>* ft = subtask_finish_times[0];
+				for (int i = 0; i < num_subtasks; i++) {
+					if (conservative) {
+						if (other_in_this == false && !other_ft[i].contains(ft[i]))
+							return false; // not all the finish time intervals of this are within those of other
+						else if (other_in_this == true && !ft[i].contains(other_ft[i]))
+							return false; // not all the finish time intervals of other are within those of this
+					}
+					else {
+						if (!other_ft[i].intersects(ft[i]))
+							return false;
 					}
 				}
 				return true;
@@ -835,14 +877,8 @@ namespace NP {
 
 			void widen_release_start_ready_finish_times(const Schedule_state<Time>& other)
 			{
-				for (int i = 0; i < subtask_finish_times.size(); i++) {
-					for (int j = 0; j < subtask_finish_times[i].size(); j++) {
-						subtask_release_times[i][j].widen(other.subtask_release_times[i][j]);
-						subtask_ready_times[i][j].widen(other.subtask_ready_times[i][j]);
-						subtask_start_times[i][j].widen(other.subtask_start_times[i][j]);
-						subtask_finish_times[i][j].widen(other.subtask_finish_times[i][j]);
-					}
-				}
+				for (int i = 0; i < num_intervals; i++)
+					intervals[i].widen(other.intervals[i]);
 			}
 
 			// no accidental copies
