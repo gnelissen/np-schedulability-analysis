@@ -157,8 +157,8 @@ template<class T> class Interval {
 
 	void widen(const Interval<T>& other)
 	{
-		a = std::min(a, other.from());
-		b = std::max(b, other.until());
+		a = std::min(a, other.a);
+		b = std::max(b, other.b);
 	}
 
 	void equate(const Interval<T>& other)

@@ -1,0 +1,26 @@
+taskset:
+  - id: T1
+    arrival: [0, 0]
+    interarrival: [10000, 10000]
+    releaseJitter: 0
+    deadline: 10000
+    priority: 0
+    segments:
+    - id: S0
+      execTime: [158, 226]
+    - id: S1
+      execTime: [63, 90]
+      predecessors:
+        finishBefore: [S2, S4, S0] 
+    - id: S2
+      execTime: [50, 71]
+      predecessors:
+        finishBefore: [S0]
+    - id: S3
+      execTime: [61, 87]
+      predecessors:
+        finishBefore: [S0]
+    - id: S4
+      execTime: [57, 82]
+      predecessors:
+        finishBefore: [S2]

@@ -18,10 +18,10 @@ namespace NP {
 		typename Task<Time>::Task_set tasks;
         // task parameters
 		std::string tid;
-		Time arr_min, arr_max, interarr_min, interarr_max, jitter, dl;
+		Time arr_min, arr_max, interarr_min, interarr_max, jitter, dl, prio;
 		// subtask parameters
 		std::string sid;
-		Time off_min, off_max, cost_min, cost_max, sdeadline, prio;
+		Time off_min, off_max, cost_min, cost_max, sdeadline, prio_st;
 		unsigned int parall;
 		// predecessor parameters
 		Time delay_min, delay_max;
@@ -37,17 +37,36 @@ namespace NP {
 				tid = t["id"].as<std::string>();
 				if(t["arrival"]) {
 					auto const arr = t["arrival"];
-					arr_min = arr["min"].as<Time>();
-					arr_max = arr["max"].as<Time>();
+					if (arr.IsSequence()) {
+						arr_min = arr[0].as<Time>();
+						arr_max = arr[1].as<Time>();
+					}
+					else {
+						arr_min = arr["min"].as<Time>();
+						arr_max = arr["max"].as<Time>();
+					}
 				}
 				else {
 					arr_min = 0;
 					arr_max = 0;
 				}
-				dl = t["deadline"].as<Time>();
+
+				if(t["deadline"])
+					dl = t["deadline"].as<Time>();
+
+				if (t["priority"])
+					prio = t["priority"].as<Time>();
+
 				auto const inter_arr = t["interarrival"];
-				interarr_min = inter_arr["min"].as<Time>();
-				interarr_max = inter_arr["max"].as<Time>();
+				if (inter_arr.IsSequence()) {
+					interarr_min = inter_arr[0].as<Time>();
+					interarr_max = inter_arr[1].as<Time>();
+				}
+				else {
+					interarr_min = inter_arr["min"].as<Time>();
+					interarr_max = inter_arr["max"].as<Time>();
+				}
+
 				if(t["releaseJitter"])
 					jitter = t["releaseJitter"].as<Time>();
 				else
@@ -60,32 +79,54 @@ namespace NP {
 				for (const auto& s : stsk) {
 					sid = s["id"].as<std::string>();
 					typename Subtask<Time>::Exec_times costs;
-					for (const auto& c : s["execTime"]) {
-						if (c["parallelism"])
-							parall = c["parallelism"].as<unsigned int>();
+					if (s["execTime"][0].IsScalar()) {
+						cost_min = s["execTime"][0].as<Time>();
+						cost_max = s["execTime"][1].as<Time>();
+						if (s["execTime"].size() == 3)
+							parall = s["execTime"][2].as<unsigned int>();
 						else
 							parall = 1;
-						cost_min = c["bcet"].as<Time>();
-						cost_max = c["wcet"].as<Time>();
 						costs.emplace(parall, Interval<Time>{cost_min, cost_max});
 					}
-					prio = s["priority"].as<Time>();
-					if (s["deadline"])
-						sdeadline = s["deadline"].as<Time>();
+					else {
+						for (const auto& c : s["execTime"]) {
+							if (c["parallelism"])
+								parall = c["parallelism"].as<unsigned int>();
+							else
+								parall = 1;
+							cost_min = c["bcet"].as<Time>();
+							cost_max = c["wcet"].as<Time>();
+							costs.emplace(parall, Interval<Time>{cost_min, cost_max});
+						}
+					}
+					if (s["priority"])
+						prio_st = s["priority"].as<Time>();
 					else
-						sdeadline = dl;
+						prio_st = prio;
 					if (s["offset"]) {
 						const auto offset = s["offset"];
-						off_min = offset["min"].as<Time>();
-						off_max = offset["max"].as<Time>();
+						if (offset.IsSequence()) {
+							off_min = offset[0].as<Time>();
+							off_max = offset[1].as<Time>();
+						}
+						else {
+							off_min = offset["min"].as<Time>();
+							off_max = offset["max"].as<Time>();
+						}
 					}
 					else {
 						off_min = 0;
 						off_max = 0;
 					}
 
+					if (s["deadline"])
+						sdeadline = s["deadline"].as<Time>();
+					else
+						sdeadline = dl-off_min;
+					
+
 					// create the subtask
-					subtasks.emplace_back(tid + ":" + sid, tidx, stidx, Interval<Time>{off_min, off_max}, costs, sdeadline, prio);
+					subtasks.emplace_back(tid + ":" + sid, tidx, stidx, Interval<Time>{off_min, off_max}, costs, sdeadline, prio_st);
 
 					++stidx;
 				}
@@ -98,17 +139,24 @@ namespace NP {
 						const auto pred_cstr = stsk[i]["predecessors"];
 						if (pred_cstr["startBefore"]) {
 							for (const auto& p : pred_cstr["startBefore"]) {
-								pred_id = p["id"].as<std::string>();
-								if (p["delay"]) {
-									const auto delay = p["delay"];
-									delay_min = delay["min"].as<Time>();
-									delay_max = delay["max"].as<Time>();
-								}
-								else {
+								if (p.IsScalar()) {
+									pred_id = p.as<std::string>();
 									delay_min = 0;
 									delay_max = 0;
 								}
-
+								else
+								{
+									pred_id = p["id"].as<std::string>();
+									if (p["delay"]) {
+										const auto delay = p["delay"];
+										delay_min = delay["min"].as<Time>();
+										delay_max = delay["max"].as<Time>();
+									}
+									else {
+										delay_min = 0;
+										delay_max = 0;
+									}
+								}
 								std::string predname = tid + ":" + pred_id;
 								const Subtask_index pred = lookup(subtasks, predname);
 								predecessors[i].add_start_before(pred, Interval<Time>{delay_min, delay_max});
@@ -117,17 +165,24 @@ namespace NP {
 						}
 						if (pred_cstr["finishBefore"]) {
 							for (const auto& p : pred_cstr["finishBefore"]) {
-								pred_id = p["id"].as<std::string>();
-								if (p["delay"]) {
-									const auto delay = p["delay"];
-									delay_min = delay["min"].as<Time>();
-									delay_max = delay["max"].as<Time>();
-								}
-								else {
+								if (p.IsScalar()) {
+									pred_id = p.as<std::string>();
 									delay_min = 0;
 									delay_max = 0;
 								}
-
+								else
+								{
+									pred_id = p["id"].as<std::string>();
+									if (p["delay"]) {
+										const auto delay = p["delay"];
+										delay_min = delay["min"].as<Time>();
+										delay_max = delay["max"].as<Time>();
+									}
+									else {
+										delay_min = 0;
+										delay_max = 0;
+									}
+								}
 								std::string predname = tid + ":" + pred_id;
 								const Subtask_index pred = lookup(subtasks, predname);
 								predecessors[i].add_finish_before(pred, Interval<Time>{delay_min, delay_max});
