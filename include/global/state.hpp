@@ -179,8 +179,7 @@ namespace NP {
 				update_ready_successors_prios(from, t, j, finish_times, scheduled_subtasks);
 				assert(ready_successors_prios.size() <= ready_subtasks.size());
 
-				// NOTE: must be done after the finish times, core availabilities and 
-				// minimum priority of next job that will be dispatched have been updated
+				// NOTE: must be done after the finish times and core availabilities have been updated
 				update_ready_times_and_certain_job_dispatch(ready_subtasks, state_space_data.tasks);
 
 				DM("*** new state: constructed " << *this << std::endl);
@@ -251,8 +250,7 @@ namespace NP {
 				update_ready_successors_prios(from, t, j, finish_times, scheduled_subtasks);
 				assert(ready_successors_prios.size() <= ready_subtasks.size());
 
-				// NOTE: must be done after the finish times, core availabilities and 
-				// minimum priority of next job that will be dispatched have been updated
+				// NOTE: must be done after the finish times and core availabilities have been updated
 				update_ready_times_and_certain_job_dispatch(ready_subtasks, state_space_data.tasks);
 
 				DM("*** new state: constructed " << *this << std::endl);
@@ -676,11 +674,6 @@ namespace NP {
 				for (int i = 0; i < ready_subtasks.size(); i++)
 				{
 					for (Subtask_ref rj : ready_subtasks[i]) {
-						// if rj has a lower priority than the next subtask that will be dispatched, 
-						// no need to calculate when rj will be ready
-						//if (min_next_prio_sbtsk != NULL && min_next_prio_sbtsk->higher_priority_than(*rj))
-						//	continue;
-
 						subtask_ready_times[i][rj->id()] = ready_time(*rj, tasks);
 						Time avail = core_avail[rj->get_min_parallelism() - 1].max();
 						Time cert_dispatch_time = std::max(avail, subtask_ready_times[i][rj->id()].max());
