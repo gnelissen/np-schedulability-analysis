@@ -240,6 +240,13 @@ namespace NP {
 				}
 				return false;
 			}
+			bool has_exclusion_with(Subtask_index id) const {
+				for (const auto& s : exclusions) {
+					if (s.subtask == id)
+						return true;
+				}
+				return false;
+			}
 		};
 	    struct Predecessors {
 		    std::vector<Precedence_cstr> start_before_start; // set of jobs that must start before j starts
@@ -267,6 +274,28 @@ namespace NP {
 					if (s.subtask == id)
 						return true;
 				}
+				for (const auto& s : exclusions) {
+					if (s.subtask == id)
+						return true;
+				}
+				return false;
+			}
+
+			bool finishes_before(Subtask_index id) const {
+				for (const auto& s : finish_before_start) {
+					if (s.subtask == id)
+						return true;
+				}
+				return false;
+			}
+			bool starts_before(Subtask_index id) const {
+				for (const auto& s : start_before_start) {
+					if (s.subtask == id)
+						return true;
+				}
+				return false;
+			}
+			bool has_exclusion_with(Subtask_index id) const {
 				for (const auto& s : exclusions) {
 					if (s.subtask == id)
 						return true;

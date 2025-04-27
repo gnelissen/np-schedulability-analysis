@@ -102,10 +102,27 @@ namespace NP {
 				if (ft.max() < s.core_availability(2).min())
 					return true;
 
-				// If at least one successor of j has already been dispatched, then j must have finished already.
+				// If at least one successor of j that must start after j finishes has already been dispatched, 
+				// then j must have finished already.
 				const auto& successors = tasks[j.task_id()].get_successors_of(j.id());
 				for (const auto& succ : successors.start_after_finish) {
 					if (is_dispatched(n, j.task_id(), succ.subtask)) {
+						return true;
+					}
+				}
+				// If at least on subtask who has an exclusion constraints with j started after j,
+				// then j must have finished already.
+				Interval<Time> st = s.get_start_times(j.task_id(), j.id());
+				for (const auto& excl : successors.exclusions) {
+					Interval<Time> st_excl = s.get_start_times(j.task_id(), excl.subtask);
+					if (st_excl.min() > st.max()) {
+						return true;
+					}
+				}
+				// If at least one successor of j that must start more that j.cost.min time units after j starts
+				// has already been dispatched, then j must have finished already.
+				for (const auto& succ : successors.start_after_start) {
+					if (succ.delay.min() >= j.get_cost().min() && is_dispatched(n, j.task_id(), succ.subtask)) {
 						return true;
 					}
 				}
@@ -162,9 +179,9 @@ namespace NP {
 					// If j_pred is a predecessor of both j_high and j_low, we can disregard it if the maximum suspension from j_pred to j_high
 					// is at most the minimum suspension from j_pred to j_low: susp_max(j_pred -> j_high) <= susp_min(j_pred -> j_low).
 					//
-					// To illustrate this, assume that j_low becomes ready at some time `t`. Then, due to the suspension, we know that
-					// j_pred must have finished no later than `t - susp_min(j_pred -> j_low)`, and that `j_pred` can only block `j_high`
-					// up to time `t + susp_max(j_pred -> j_high) - susp_min(j_pred -> j_low) <= t`. So either:
+					// To illustrate this, assume that j_low becomes ready at some time `t`. Then, due to the delay, we know that
+					// j_pred must have finished no later than `t - dealy_min(j_pred -> j_low)`, and that `j_pred` can only block `j_high`
+					// up to time `t + delay_max(j_pred -> j_high) - delay_min(j_pred -> j_low) <= t`. So either:
 					// - j_high is ready when j_low becomes ready, so the assumption that j_low is dispatched next must be false, or
 					// - something else causes j_high to become ready later than j_low, so this constraint is not important
 					// Either way, this constraint can be disregarded.
@@ -173,8 +190,8 @@ namespace NP {
 					if (j_high.task_id() == j_low.task_id()) {
 						bool can_disregard = false;
 						for (const auto& pred_j_low : predecessors_j_low.finish_before_start) {
-							// Note that the condition `susp_max(j_pred -> j_high) <= susp_min(j_pred -> j_low)` will be true if and only if there
-							// exists a constraint from j_pred to j_low whose *minimum* suspension is at least `susp_max(j_pred -> j_high)`. So we can
+							// Note that the condition `delay_max(j_pred -> j_high) <= delay_min(j_pred -> j_low)` will be true if and only if there
+							// exists a constraint from j_pred to j_low whose *minimum* delay is at least `delay_max(j_pred -> j_high)`. So we can
 							// stop searching as soon as we find one such constraint.
 							if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() >= pred_j_high.delay.max()) {
 								can_disregard = true;
@@ -191,11 +208,137 @@ namespace NP {
 							// are disregarded.
 							continue;
 						}
+						// the same reasoning holds if `j_pred` has an exclusion constraint with `j_low`
+						for (const auto& pred_j_low : predecessors_j_low.exclusions) {
+							if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() >= pred_j_high.delay.max()) {
+								can_disregard = true;
+								break;
+							}
+						}
+						if (can_disregard)
+							continue;
+
+						// similarly, if `j_low` must start `x` time units after `j_pred` started and x >= j_pred exect time + delay until j_high can start,
+						// then we can we can disregard `j_pred` 
+						for (const auto& pred_j_low : predecessors_j_low.start_before_start) {
+							if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() >= pred_j_high.delay.max() + j_pred.get_cost().max()) {
+								can_disregard = true;
+								break;
+							}
+						}
+						if (can_disregard)
+							continue;
 					}
 
 					Interval<Time> ft = s.get_finish_times(j_pred.task_id(), j_pred.id());
 					latest_ready_high = std::max(latest_ready_high, ft.max() + pred_j_high.delay.max());
 				}
+
+				for (const auto& pred_j_high : predecessors_j_high.start_before_start)
+				{
+					// If the suspension is 0, then j_pred cannot postpone the (latest) ready time of j_high 
+					// Note that j_pred was dispatched in the past thus it already certainly started before `j_low` is dispatched
+					if (pred_j_high.delay.max() == 0)
+						continue;
+
+					const Subtask<Time>& j_pred = tasks[j_high.task_id()].get_subtask(pred_j_high.subtask);
+
+					// If j_pred is a predecessor of both j_high and j_low, we can disregard it if the maximum suspension from j_pred to j_high
+					// is at most the minimum suspension from j_pred to j_low: susp_max(j_pred -> j_high) <= susp_min(j_pred -> j_low).
+					// Note that j_pred can be a predecessor of both j_high and j_low only if j_high and j_low are subtasks of the same task.
+					if (j_high.task_id() == j_low.task_id()) {
+						bool can_disregard = false;
+						for (const auto& pred_j_low : predecessors_j_low.finish_before_start) {
+							// Note that the condition `delay_max(j_pred -> j_high) <= delay_min(j_pred -> j_low)` will be true if and only if there
+							// exists a constraint from j_pred to j_low whose *minimum* delay is at least `delay_max(j_pred -> j_high)`. So we can
+							// stop searching as soon as we find one such constraint.
+							if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() + j_pred.get_cost().min() >= pred_j_high.delay.max()) {
+								can_disregard = true;
+								break;
+							}
+						}
+						if (can_disregard)
+							continue;
+
+						// the same reasoning holds if `j_pred` has an exclusion constraint with `j_low`
+						for (const auto& pred_j_low : predecessors_j_low.exclusions) {
+							if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() + j_pred.get_cost().min() >= pred_j_high.delay.max()) {
+								can_disregard = true;
+								break;
+							}
+						}
+						if (can_disregard)
+							continue;
+
+						// similarly, if `j_low` must start `x` time units after `j_pred` started and x >= delay until j_high can start,
+						// then we can we can disregard `j_pred` 
+						for (const auto& pred_j_low : predecessors_j_low.start_before_start) {
+							if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() >= pred_j_high.delay.max()) {
+								can_disregard = true;
+								break;
+							}
+						}
+						if (can_disregard)
+							continue;
+					}
+
+					Interval<Time> st = s.get_start_times(j_pred.task_id(), j_pred.id());
+					latest_ready_high = std::max(latest_ready_high, st.max() + pred_j_high.delay.max());
+				}
+
+				for (const auto& excl : predecessors_j_high.exclusions)
+				{
+					const Subtask<Time>& j_pred = tasks[j_high.task_id()].get_subtask(excl.subtask);
+
+					// if the subtask `j_high` has an exlusion constraint with did not start yet,
+					// then we disregard it as it cannot postpone the ready time of `j_high`
+					if (not is_dispatched(n, j_pred))
+						continue;
+
+					// If the delay is 0 and j_pred is certainly finished when j_low is dispatched, then j_pred cannot postpone
+					// the (latest) ready time of j_high.
+					if (excl.delay.max() == 0 && is_cert_finished(j_pred, n, s))
+						continue;
+
+					// If j_pred is also a predecessor of  j_low, we can disregard it if the maximum suspension from j_pred to j_high
+					// is at most the minimum suspension from j_pred to j_low: susp_max(j_pred -> j_high) <= susp_min(j_pred -> j_low).
+					if (j_high.task_id() == j_low.task_id()) {
+						bool can_disregard = false;
+						for (const auto& pred_j_low : predecessors_j_low.finish_before_start) {
+							if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() >= excl.delay.max()) {
+								can_disregard = true;
+								break;
+							}
+						}
+						if (can_disregard)
+							continue;
+
+						// the same reasoning holds if `j_pred` has an exclusion constraint with `j_low`
+						for (const auto& pred_j_low : predecessors_j_low.exclusions) {
+							if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() >= excl.delay.max()) {
+								can_disregard = true;
+								break;
+							}
+						}
+						if (can_disregard)
+							continue;
+
+						// similarly, if `j_low` must start `x` time units after `j_pred` started and x >= j_pred exect time + delay until j_high can start,
+						// then we can we can disregard `j_pred` 
+						for (const auto& pred_j_low : predecessors_j_low.start_before_start) {
+							if (pred_j_low.subtask == j_pred.id() && pred_j_low.delay.min() >= excl.delay.max() + j_pred.get_cost().max()) {
+								can_disregard = true;
+								break;
+							}
+						}
+						if (can_disregard)
+							continue;
+					}
+
+					Interval<Time> ft = s.get_finish_times(j_pred.task_id(), j_pred.id());
+					latest_ready_high = std::max(latest_ready_high, ft.max() + excl.delay.max());
+				}
+
 				return latest_ready_high;
 			}
 
@@ -217,8 +360,6 @@ namespace NP {
 				auto ready_min = s.get_ready_times(reference_subtask.task_id(), reference_subtask.id()).min();
 				Time latest_ready_high = Time_model::constants<Time>::infinity();
 
-				// a higer priority successor job cannot be ready before 
-				// a job of any priority is released
 				const auto& ready_subtasks = n.get_ready_subtasks();
 				for (int i = 0; i < num_tasks(); i++) {
 					for (int j=0; j < ready_subtasks[i].size(); j++)
@@ -227,7 +368,15 @@ namespace NP {
 
 						// j_high is not relevant if it is already scheduled or not of higher priority
 						if (j_high.higher_priority_than(reference_subtask)) {
-							// does it beat what we've already seen?
+							// if j_high is certainly ready before the earliest ready time of reference_subtask
+							// then no need to search further
+							Interval<Time> rt = s.get_ready_times(j_high.task_id(), j_high.id());
+							if (rt.max() <= ready_min)
+								return rt.max();
+
+							// otherwise, let's calculate the latest ready time of j_high given that 
+							// reference_subtask is the next subtask being dispatched, and check if 
+							// it beats what we've already seen
 							latest_ready_high = std::min(latest_ready_high, conditional_latest_ready_time(n, s, j_high, reference_subtask, ncores));
 							if (latest_ready_high <= ready_min) 
 								return latest_ready_high;
