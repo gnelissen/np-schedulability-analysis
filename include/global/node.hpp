@@ -141,7 +141,7 @@ namespace NP {
 				a_max = 0;
 				// clear the scheduled_subtasks vector and update ready_subtasks
 				for (std::size_t i = 0; i < state_space_data.num_tasks(); ++i) {
-					scheduled_subtasks[i].clear();
+					scheduled_subtasks[i].reset();
 					ready_subtasks[i].clear();
 					// if a subtask has no predecessors, it is ready
 					for (const auto& st : state_space_data.tasks[i].get_subtasks()) {
@@ -423,7 +423,7 @@ namespace NP {
 
 				// if all subtasks have been dispatched, we release a new instance of the task
 				if (ready_subtasks[task_id].empty()) {
-					scheduled_subtasks[task_id].clear();
+					scheduled_subtasks[task_id].reset();
 					// if a subtask has no predecessors, it is ready
 					for (const auto& st : task.get_subtasks()) {
 						const auto& pred = task.get_predecessors_of(st.id());

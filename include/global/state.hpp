@@ -851,8 +851,7 @@ namespace NP {
 						// if the job to insert is already in the list, we do not insert it a second time
 						if (sp == sbtsk_to_insert)
 							sbtsk_to_insert = NULL;
-
-						if (sbtsk_to_insert->higher_priority_than(*sp)) {
+						else if (sbtsk_to_insert->higher_priority_than(*sp)) {
 							ready_successors_prios.push_back(sbtsk_to_insert);
 							sbtsk_to_insert = NULL;
 						}
