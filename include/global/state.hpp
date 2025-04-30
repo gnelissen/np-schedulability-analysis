@@ -15,6 +15,7 @@
 #include "util.hpp"
 #include "global/state_space_data.hpp"
 #include "global/node.hpp"
+#include "sched_policy.hpp"
 
 #ifdef CONFIG_PARALLEL
 #include <tbb/mutex.h>
@@ -176,7 +177,7 @@ namespace NP {
 				update_rel_start_and_finish_times(from, j, t, start_times, finish_times);
 
 				// update the minimum priority of the next job that will be dispatched
-				update_ready_successors_prios(from, t, j, finish_times, scheduled_subtasks);
+				update_ready_successors_prios(from, t, j, finish_times, scheduled_subtasks, state_space_data.sched_policy);
 				assert(ready_successors_prios.size() <= ready_subtasks.size());
 
 				// NOTE: must be done after the finish times and core availabilities have been updated
@@ -247,7 +248,7 @@ namespace NP {
 
 				// update the minimum priority of the next job that will be dispatched
 				ready_successors_prios.clear();
-				update_ready_successors_prios(from, t, j, finish_times, scheduled_subtasks);
+				update_ready_successors_prios(from, t, j, finish_times, scheduled_subtasks, state_space_data.sched_policy);
 				assert(ready_successors_prios.size() <= ready_subtasks.size());
 
 				// NOTE: must be done after the finish times and core availabilities have been updated
@@ -309,6 +310,90 @@ namespace NP {
 			Time next_certain_job_disptach() const
 			{
 				return earliest_certain_job_disptach;
+			}
+
+			bool certainly_higher_priority_than(const Subtask<Time>& high, const Subtask<Time>& low, Sched_policy prio_type) const 
+			{
+				switch (prio_type) {
+				case edf:
+				{
+					Time abs_deadline_high = subtask_release_times[high.task_id()][high.id()].max() + high.get_deadline();
+					Time abs_deadline_low = subtask_release_times[low.task_id()][low.id()].min() + low.get_deadline();
+					return abs_deadline_high < abs_deadline_low or (abs_deadline_high == abs_deadline_low and high.higher_priority_than(low));
+				}
+				case fifo:
+				{
+					Time rel_high = subtask_release_times[high.task_id()][high.id()].max();
+					Time rel_low = subtask_release_times[low.task_id()][low.id()].min();
+					return rel_high < rel_low or (rel_high == rel_low and high.higher_priority_than(low));
+				}
+				case fp:
+					return high.higher_priority_than(low);
+				}
+				return false;
+			}
+
+			bool possibly_higher_priority_than(const Subtask<Time>& high, const Subtask<Time>& low, Sched_policy prio_type) const 
+			{
+				switch (prio_type) {
+				case edf:
+				{
+					Time abs_deadline_high = subtask_release_times[high.task_id()][high.id()].min() + high.get_deadline();
+					Time abs_deadline_low = subtask_release_times[low.task_id()][low.id()].max() + low.get_deadline();
+					return abs_deadline_high < abs_deadline_low or (abs_deadline_high == abs_deadline_low and high.higher_priority_than(low));
+				}
+				case fifo:
+				{
+					Time rel_high = subtask_release_times[high.task_id()][high.id()].min();
+					Time rel_low = subtask_release_times[low.task_id()][low.id()].max();
+					return rel_high < rel_low or (rel_high == rel_low and high.higher_priority_than(low));
+				}
+				case fp:
+					return !low.higher_priority_than(high);
+				}
+				return true;
+			}
+
+			bool higher_min_priority_than(const Subtask<Time>& high, const Subtask<Time>& low, Sched_policy prio_type) const
+			{
+				switch (prio_type) {
+				case edf:
+				{
+					Time abs_deadline_high = subtask_release_times[high.task_id()][high.id()].min() + high.get_deadline();
+					Time abs_deadline_low = subtask_release_times[low.task_id()][low.id()].min() + low.get_deadline();
+					return abs_deadline_high < abs_deadline_low or (abs_deadline_high == abs_deadline_low and high.higher_priority_than(low));
+				}
+				case fifo:
+				{
+					Time rel_high = subtask_release_times[high.task_id()][high.id()].min();
+					Time rel_low = subtask_release_times[low.task_id()][low.id()].min();
+					return rel_high < rel_low or (rel_high == rel_low and high.higher_priority_than(low));
+				}
+				case fp:
+					return high.higher_priority_than(low);
+				}
+				return false;
+			}
+
+			bool higher_max_priority_than(const Subtask<Time>& high, const Subtask<Time>& low, Sched_policy prio_type) const
+			{
+				switch (prio_type) {
+				case edf:
+				{
+					Time abs_deadline_high = subtask_release_times[high.task_id()][high.id()].max() + high.get_deadline();
+					Time abs_deadline_low = subtask_release_times[low.task_id()][low.id()].max() + low.get_deadline();
+					return abs_deadline_high < abs_deadline_low or (abs_deadline_high == abs_deadline_low and high.higher_priority_than(low));
+				}
+				case fifo:
+				{
+					Time rel_high = subtask_release_times[high.task_id()][high.id()].max();
+					Time rel_low = subtask_release_times[low.task_id()][low.id()].max();
+					return rel_high < rel_low or (rel_high == rel_low and high.higher_priority_than(low));
+				}
+				case fp:
+					return high.higher_priority_than(low);
+				}
+				return false;
 			}
 
 			// returns true if the availability inervals of one state overlaps with the other state.
@@ -381,19 +466,19 @@ namespace NP {
 			}
 
 			// first check if 'other' state can merge with this state, then, if yes, merge 'other' with this state.
-			bool try_to_merge(const Schedule_state<Time>& other, bool conservative, bool use_job_finish_times = false)
+			bool try_to_merge(const Schedule_state<Time>& other, const Sched_policy sched_policy, bool conservative, bool use_job_finish_times = false)
 			{
 				if (!can_merge_with(other, conservative, use_job_finish_times))
 					return false;
 
-				merge(other);
+				merge(other, sched_policy);
 
 				DM("+++ merged " << other << " into " << *this << std::endl);
 				return true;
 			}
 
 			void merge(
-				const Schedule_state<Time>& other)
+				const Schedule_state<Time>& other, const Sched_policy sched_policy)
 			{
 				for (int i = 0; i < core_avail.size(); i++)
 					core_avail[i] |= other.core_avail[i];
@@ -434,7 +519,7 @@ namespace NP {
 				// thus it is safe to take the job with the highest prios among those that are in that list
 				if (min_next_prio_sbtsk == NULL ||
 					other.min_next_prio_sbtsk != NULL &&
-					other.min_next_prio_sbtsk->higher_priority_than(*min_next_prio_sbtsk))
+					higher_min_priority_than(*other.min_next_prio_sbtsk, *min_next_prio_sbtsk, sched_policy))
 					min_next_prio_sbtsk = other.min_next_prio_sbtsk;
 
 				DM("+++ merged (cav,jft,cert_t) into " << *this << std::endl);
@@ -784,7 +869,8 @@ namespace NP {
 				const Task<Time>& t_dispatched,
 				const Subtask<Time>& j_dispatched,
 				const Interval<Time>& j_disp_finish_times,
-				const Subtask_set& scheduled_subtasks)
+				const Subtask_set& scheduled_subtasks,
+				const Sched_policy sched_policy)
 			{
 				ready_successors_prios.reserve(from.ready_successors_prios.size() + 1);
 				Subtask_index j_idx = j_dispatched.id();
@@ -805,7 +891,7 @@ namespace NP {
 						&& s_cstr.delay.max() == 0 && subtask_release_times[j_task_idx][succ_idx].max() <= subtask_release_times[j_task_idx][j_idx].min() + j_dispatched.get_cost().min() // j_disp_finish_times.min()
 						&& succ_ready_right_after_pred(t_dispatched, j_dispatched, succ, j_disp_finish_times, successors_of, predecessors_of, scheduled_subtasks[j_task_idx]))
 					{
-						if (sbtsk_to_insert == NULL || succ.higher_priority_than(*sbtsk_to_insert)) {
+						if (sbtsk_to_insert == NULL || higher_min_priority_than(succ , *sbtsk_to_insert, sched_policy)) {
 							sbtsk_to_insert = &succ;
 						}
 					}
@@ -820,7 +906,7 @@ namespace NP {
 						&& subtask_release_times[j_task_idx][succ_idx].max() + s_cstr.delay.max() <= subtask_release_times[j_task_idx][j_idx].min() + j_dispatched.get_cost().min() // j_disp_finish_times.min()
 						&& succ_ready_right_after_pred(t_dispatched, j_dispatched, succ, j_disp_finish_times, successors_of, predecessors_of, scheduled_subtasks[j_task_idx]))
 					{
-						if (sbtsk_to_insert == NULL || succ.higher_priority_than(*sbtsk_to_insert)) {
+						if (sbtsk_to_insert == NULL || higher_min_priority_than(succ, *sbtsk_to_insert, sched_policy)) {
 							sbtsk_to_insert = &succ;
 						}
 					}
@@ -835,7 +921,7 @@ namespace NP {
 						&& s_cstr.delay.max() == 0 && subtask_release_times[j_task_idx][succ_idx].max() <= subtask_release_times[j_task_idx][j_idx].min() + j_dispatched.get_cost().min() // j_disp_finish_times.min()
 						&& succ_ready_right_after_pred(t_dispatched, j_dispatched, succ, j_disp_finish_times, successors_of, predecessors_of, scheduled_subtasks[j_task_idx]))
 					{
-						if (sbtsk_to_insert == NULL || succ.higher_priority_than(*sbtsk_to_insert)) {
+						if (sbtsk_to_insert == NULL || higher_min_priority_than(succ, *sbtsk_to_insert, sched_policy)) {
 							sbtsk_to_insert = &succ;
 						}
 					}
@@ -851,7 +937,7 @@ namespace NP {
 						// if the job to insert is already in the list, we do not insert it a second time
 						if (sp == sbtsk_to_insert)
 							sbtsk_to_insert = NULL;
-						else if (sbtsk_to_insert->higher_priority_than(*sp)) {
+						else if (higher_min_priority_than(*sbtsk_to_insert, *sp, sched_policy)) {
 							ready_successors_prios.push_back(sbtsk_to_insert);
 							sbtsk_to_insert = NULL;
 						}

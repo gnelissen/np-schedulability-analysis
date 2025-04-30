@@ -41,6 +41,8 @@ static bool want_dense;
 static bool want_multiprocessor = false;
 static unsigned int num_processors = 1;
 
+static NP::Sched_policy sched_policy = NP::Sched_policy::fp;
+
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 static bool want_dot_graph;
 #endif
@@ -81,7 +83,8 @@ static Analysis_result analyze(
 	typename NP::Task<Time>::Task_set tasks = NP::parse_tasks_file<Time>(in);
 	NP::Scheduling_problem<Time> problem{
 	    tasks,
-		num_processors};
+		num_processors,
+		sched_policy};
 
 	// Set common analysis options
 	NP::Analysis_options opts;
@@ -304,10 +307,6 @@ int main(int argc, char** argv)
 		.help("length of the observation window analyzed by the tool (>= 2)")
 		.set_default("0");
 
-	parser.add_option("-p", "--precedence").dest("precedence_file")
-	      .help("name of the file that contains the job set's precedence DAG")
-	      .set_default("");
-
 	parser.add_option("-a", "--abort-actions").dest("abort_file")
 	      .help("name of the file that contains the job set's abort actions")
 	      .set_default("");
@@ -315,6 +314,11 @@ int main(int argc, char** argv)
 	parser.add_option("-m", "--multiprocessor").dest("num_processors")
 	      .help("set the number of processors of the platform")
 	      .set_default("1");
+
+	parser.add_option("-p", "--policy").dest("sched_policy")
+		.metavar("SCHED-POLICY")
+		.choices({ "fp", "edf", "fifo"}).set_default("fp")
+		.help("choose the scheduling policy to dispatch jobs on processors. Options: fp (default), edf, fifo.");
 
 	parser.add_option("--threads").dest("num_threads")
 	      .help("set the number of worker threads (parallel analysis)")
@@ -408,6 +412,21 @@ int main(int argc, char** argv)
 	num_processors = options.get("num_processors");
 	if (!num_processors || num_processors > MAX_PROCESSORS) {
 		std::cerr << "Error: invalid number of processors\n" << std::endl;
+		return 1;
+	}
+
+	std::string sched_policy_opts = (const std::string&)options.get("sched_policy");
+	if (sched_policy_opts == "fp") {
+		sched_policy = NP::Sched_policy::fp;
+	}
+	else if (sched_policy_opts == "edf") {
+		sched_policy = NP::Sched_policy::edf;
+	}
+	else if (sched_policy_opts == "fifo") {
+		sched_policy = NP::Sched_policy::fifo;
+	}
+	else {
+		std::cerr << "Error: invalid scheduling policy\n" << std::endl;
 		return 1;
 	}
 

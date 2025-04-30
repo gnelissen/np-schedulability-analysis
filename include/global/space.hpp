@@ -29,6 +29,7 @@
 
 #include "global/state.hpp"
 #include "object_pool.hpp"
+#include "sched_policy.hpp"
 
 namespace NP {
 
@@ -53,7 +54,7 @@ namespace NP {
 				if (opts.verbose)
 					std::cout << "Starting" << std::endl;
 
-				State_space* s = new State_space(prob.tasks, prob.aborts, prob.num_processors,
+				State_space* s = new State_space(prob.tasks, prob.aborts, prob.num_processors, prob.sched_policy,
 					{ opts.merge_conservative, opts.merge_use_job_finish_times, opts.merge_depth }, opts.l_obs_window, opts.max_depth, opts.timeout, opts.early_exit, opts.verbose);
 				s->be_naive = opts.be_naive;
 				if (opts.verbose)
@@ -298,13 +299,14 @@ namespace NP {
 			State_space(const Task_set& tasks,
 				const Abort_actions& aborts,
 				unsigned int num_cpus,
+				Sched_policy sched_policy,
 				Merge_options merge_options,
 				unsigned int l_obs_window,
 				unsigned int max_depth,
 				double max_cpu_time = 0,				
 				bool early_exit = true,
 				bool verbose = false)
-				: state_space_data(tasks, aborts, num_cpus)
+				: state_space_data(tasks, aborts, num_cpus, sched_policy)
 				, aborted(false)
 				, timed_out(false)
 				, observed_deadline_miss(false)
@@ -445,7 +447,7 @@ namespace NP {
 #ifndef CONFIG_PARALLEL
 				if (!(n.get_states()->empty())) {
 #endif
-					int n_states_merged = n.merge_states(new_s, merge_opts.conservative, merge_opts.use_finish_times, merge_opts.budget);
+					int n_states_merged = n.merge_states(new_s, state_space_data.sched_policy, merge_opts.conservative, merge_opts.use_finish_times, merge_opts.budget);
 					if (n_states_merged > 0) {
 						release_state(&new_s); // if we could merge no need to keep track of the new state anymore
 #ifdef CONFIG_PARALLEL
@@ -617,9 +619,19 @@ namespace NP {
 				}*/
 			}
 
-			bool all_jobs_scheduled(const Node& n)
+			bool all_jobs_scheduled(const Node& n) const
 			{
 				return n.finish_range().from() >= length_obs_window;
+			}
+
+			inline bool certainly_higher_priority_than(const Subtask<Time>& j_high, const Subtask<Time>& j_low, const State& s) const 
+			{
+				return s.certainly_higher_priority_than(j_high, j_low, state_space_data.sched_policy);
+			}
+
+			inline bool possibly_higher_priority_than(const Subtask<Time>& j_high, const Subtask<Time>& j_low, const State& s) const 
+			{
+				return s.possibly_higher_priority_than(j_high, j_low, state_space_data.sched_policy);
 			}
 
 			// assumes j is ready
@@ -645,17 +657,17 @@ namespace NP {
 				return { est, lst };
 			}
 
-			Time earliest_job_abortion(const Abort_action<Time>& a)
+			Time earliest_job_abortion(const Abort_action<Time>& a) const
 			{
 				return a.earliest_trigger_time() + a.least_cleanup_cost();
 			}
 
-			Time latest_job_abortion(const Abort_action<Time>& a)
+			Time latest_job_abortion(const Abort_action<Time>& a) const
 			{
 				return a.latest_trigger_time() + a.maximum_cleanup_cost();
 			}
 
-			Interval<Time> calculate_abort_time(const Subtask<Time>& j, Time est, Time lst, Time eft, Time lft)
+			Interval<Time> calculate_abort_time(const Subtask<Time>& j, Time est, Time lst, Time eft, Time lft) const
 			{
 				/*auto j_idx = j.get_job_index();
 				auto abort_action = state_space_data.abort_action_of(j_idx);
@@ -699,7 +711,7 @@ namespace NP {
 					// if the job priority is lower than than the minimum priority of the next dispatched job, it will not be dispatched next
 					// (remember that lower number means higher priority)
 					Subtask_ref next_dispatch_min_prio = s->get_next_dispatched_job_min_priority();
-					if (next_dispatch_min_prio != NULL && next_dispatch_min_prio->higher_priority_than(*j))
+					if (next_dispatch_min_prio != NULL && s->certainly_higher_priority_than(*next_dispatch_min_prio, *j, state_space_data.sched_policy))
 						continue;
 
 					Time t_wc = s->next_certain_job_disptach();

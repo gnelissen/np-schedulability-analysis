@@ -14,6 +14,7 @@
 
 #include "problem.hpp"
 #include "global/state.hpp"
+#include "sched_policy.hpp"
 
 namespace NP {
 	namespace Global {
@@ -42,13 +43,16 @@ namespace NP {
 
 		public:
 			const Task_set tasks;
+			const Sched_policy sched_policy;
 
 			State_space_data(const Task_set& tasks,
 				const Abort_actions& aborts,
-				unsigned int num_cpus)
+				unsigned int num_cpus,
+				Sched_policy sched_policy = fp)
 				: tasks(tasks)
 				, num_cpus(num_cpus)
 				, abort_actions(tasks.size(), NULL)
+				, sched_policy(sched_policy)
 			{
 				/*for (const Abort_action<Time>& a : aborts) {
 					const Job<Time>& j = lookup<Time>(jobs, a.get_id());
@@ -367,7 +371,7 @@ namespace NP {
 						const Subtask<Time>& j_high = *ready_subtasks[i][j];
 
 						// j_high is not relevant if it is already scheduled or not of higher priority
-						if (j_high.higher_priority_than(reference_subtask)) {
+						if (s.certainly_higher_priority_than(j_high, reference_subtask, sched_policy)) {
 							// if j_high is certainly ready before the earliest ready time of reference_subtask
 							// then no need to search further
 							Interval<Time> rt = s.get_ready_times(j_high.task_id(), j_high.id());

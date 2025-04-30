@@ -15,6 +15,7 @@
 #include "util.hpp"
 #include "global/state_space_data.hpp"
 #include "global/state.hpp"
+#include "sched_policy.hpp"
 
 #ifdef CONFIG_PARALLEL
 #include <tbb/mutex.h>
@@ -283,7 +284,7 @@ namespace NP {
 			// increase accurracy of the analysis but increases runtime significantly.
 			// The 'budget' defines how many states can be merged at once. If 'budget = -1', then there is no limit. 
 			// Returns the number of existing states the new state was merged with.
-			int merge_states(const Schedule_state<Time>& s, bool conservative, bool use_job_finish_times = false, int budget = 1)
+			int merge_states(const Schedule_state<Time>& s, const Sched_policy sched_policy, bool conservative, bool use_job_finish_times = false, int budget = 1)
 			{
 #ifdef CONFIG_PARALLEL
 				tbb::mutex::scoped_lock lock(mtx);
@@ -298,7 +299,7 @@ namespace NP {
 					State* state = *it;
 					if (result == false)
 					{
-						if (state->try_to_merge(s, conservative, use_job_finish_times))
+						if (state->try_to_merge(s, sched_policy, conservative, use_job_finish_times))
 						{
 							// Update the node first_core_availability
 							first_core_availability.widen(s.core_availability());
@@ -317,7 +318,7 @@ namespace NP {
 					}
 					else // if we already merged with one state at least
 					{
-						if (last_state_merged->try_to_merge(*state, conservative, use_job_finish_times))
+						if (last_state_merged->try_to_merge(*state, sched_policy, conservative, use_job_finish_times))
 						{
 							// the state was merged => we can thus remove the old one from the list of states
 							it = states.erase(it);

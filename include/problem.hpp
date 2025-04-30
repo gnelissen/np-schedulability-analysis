@@ -3,6 +3,7 @@
 
 #include "tasks.hpp"
 #include "aborts.hpp"
+#include "sched_policy.hpp"
 
 namespace NP {
 
@@ -16,7 +17,7 @@ namespace NP {
 		// ** Description of the workload:
 		// (1) a set of recurrent tasks
 	    Task_set tasks;
-		// (3) abort actions for (some of) the jobs
+		// (2) abort actions for (some of) the jobs
 		Abort_actions aborts;
 
 		// ** Platform model:
@@ -24,20 +25,26 @@ namespace NP {
 		// dispatched (globally, in priority order)
 		unsigned int num_processors;
 
+		// ** Scheduling policy
+		// the scheduling policy used to dispatch the jobs on processors
+		Sched_policy sched_policy;
+
 		// Classic default setup: no abort actions
-		Scheduling_problem(const Task_set& tasks, unsigned int num_processors = 1)
+		Scheduling_problem(const Task_set& tasks, unsigned int num_processors = 1, Sched_policy sched = fp)
 		: num_processors(num_processors)
 		, tasks(tasks)
+		, sched_policy(sched)
 		{
 			assert(num_processors > 0);
 		}
 
-		// Constructor with abort actions and precedence constraints
+		// Constructor with abort actions
 	    Scheduling_problem(const Task_set& tasks, const Abort_actions& aborts,
-		                   unsigned int num_processors)
+		                   unsigned int num_processors = 1, Sched_policy sched = fp)
 		: num_processors(num_processors)
 		, tasks(tasks)
 		, aborts(aborts)
+		, sched_policy(sched)
 		{
 			assert(num_processors > 0);
 			//validate_abort_refs<Time>(aborts, tasks);
