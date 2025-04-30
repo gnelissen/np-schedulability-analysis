@@ -188,8 +188,9 @@ namespace NP {
 
 	    friend std::ostream& operator<<(std::ostream& stream, const Subtask& t) {
 		    stream << "Sub-task{" << t.index << ", " << t.release_offset << ", ";
-		    for (auto i : t.exec_time) stream << i.first << " cores: " << i.second << ", ";
-		    << t.priority << "}";
+		    for (auto i : t.exec_time) 
+				stream << i.first << " cores: " << i.second << ", ";
+			stream  << t.priority << "}";
 		    return stream;
 	    }
     };
