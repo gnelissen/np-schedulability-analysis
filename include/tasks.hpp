@@ -353,11 +353,6 @@ namespace NP {
 			return key;
 		}
 
-		Priority get_priority() const
-		{
-			return priority;
-		}
-
 		Time get_deadline() const
 		{
 			return deadline;
@@ -420,29 +415,6 @@ namespace NP {
 		    assert(subtask < subtasks.size());
 		    return successors_of[subtask];
 	    }
-
-		bool higher_priority_than(const Task& other) const
-		{
-			return priority < other.priority
-			       // tie-break by task ID
-			       || (priority == other.priority
-			           && index < other.index);
-		}
-
-		bool priority_at_least_that_of(const Task& other) const
-		{
-			return priority <= other.priority;
-		}
-
-		bool priority_exceeds(Priority prio_level) const
-		{
-			return priority < prio_level;
-		}
-
-		bool priority_at_least(Priority prio_level) const
-		{
-			return priority <= prio_level;
-		}
 
 		friend std::ostream& operator<< (std::ostream& stream, const Task& t)
 		{

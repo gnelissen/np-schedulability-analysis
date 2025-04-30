@@ -71,29 +71,6 @@ namespace NP {
 
 		public:
 
-			// initial node (for convenience for unit tests)
-			Schedule_node(unsigned int num_cores)
-				: lookup_key{ 0 }
-				, num_cpus(num_cores)
-				, first_core_availability{ 0,0 }
-				, a_max{ 0 }
-				, num_jobs_scheduled(0)
-			{
-				// initialize the scheduled_subtasks and ready_subtasks vectors
-				scheduled_subtasks.reserve(sp_data.tasks.size());
-				ready_subtasks.resize(sp_data.tasks.size(), {});
-				for (std::size_t i = 0; i < sp_data.tasks.size(); ++i) {
-					// initialize the scheduled_subtasks vector such that it records no subtask dispatched yet
-					scheduled_subtasks.push_back(Index_set{ sp_data.tasks[i].get_subtasks().size() });
-					// if a subtask has no predecessors, it is ready
-					for (const auto& st : sp_data.tasks[i].get_subtasks()) {
-						const auto& pred = state_space_data.tasks[i].get_predecessors_of(st.id());
-						if (pred.start_before_start.empty() && pred.finish_before_start.empty())
-							ready_subtasks[i].push_back(&st);
-					}
-				}
-			}
-
 			// initial node
 			Schedule_node(unsigned int num_cores, const State_space_data<Time>& state_space_data)
 				: lookup_key{ 0 }
