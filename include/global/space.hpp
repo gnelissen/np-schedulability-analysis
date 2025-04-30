@@ -889,7 +889,7 @@ namespace NP {
 				int last_time;
 
 				if (verbose) {
-					std::cout << "0%";
+					std::cout << "0 (depth)";
 					last_time = get_cpu_time();
 				}
 
@@ -918,7 +918,7 @@ namespace NP {
 					if (verbose) {
 						int time = get_cpu_time();
 						if (time > last_time + 4) { // update progress information approxmately every 4 seconds of runtime
-							std::cout << "\r" << (int)(((double)current_job_count / max_depth) * 100) << "% (" << current_job_count << "/" << max_depth << ")";
+							std::cout << "\r" << current_job_count << "(depth)";
 							last_time = time;
 						}
 					}
