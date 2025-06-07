@@ -11,3 +11,6 @@ build/
 cmake-build-debug/
 .vscode/
 .idea/
+/.vs
+/bld
+/res.text

@@ -8,6 +8,7 @@
 #include "time.hpp"
 #include "aborts.hpp"
 #include "yaml-cpp/yaml.h"
+#include "tasks.hpp"
 
 namespace NP {
 

@@ -5,8 +5,9 @@
 #include <iostream>
 #include <ostream>
 #include <numeric>
-
-#include <set>
+#include <vector>
+#include <cstring>
+#include <string>
 
 #include "config.h"
 #include "cache.hpp"
