@@ -75,9 +75,8 @@ namespace NP {
 					else
 						clusters.emplace_back(from.cluster(i));
 				}
-
 				// save the job finish time of every job with a successor that is not executed yet in the current state
-				update_job_finish_times(from, std::vector<const Job<Time>*> {&j}, std::vector<Interval<Time>> {start_times}, std::vector<Interval<Time>> {finish_times}, successors_of, predecessors_of, scheduled_jobs);
+				update_job_finish_times(from, &j, start_times, finish_times, successors_of, predecessors_of, scheduled_jobs);
 				updated_earliest_certain_successor_job_disptach(ready_succ_jobs, predecessors_of);
 			}
 
@@ -218,8 +217,8 @@ namespace NP {
 			// update the list of finish times of jobs with successors w.r.t. the previous system state
 			void update_job_finish_times(const Schedule_state& from,
 				const std::vector<Job_ref>& j_set,
-				const std::vector<Interval<Time>> start_times,
-				const std::vector<Interval<Time>> finish_times,
+				const std::vector<Interval<Time>>& start_times,
+				const std::vector<Interval<Time>>& finish_times,
 				const Successors& successors_of,
 				const Predecessors& predecessors_of,
 				const Dispatched_job_set& scheduled_jobs)
@@ -309,6 +308,100 @@ namespace NP {
 					{
 						if (job_lft > start_times[job_aff].max())
 							job_lft = start_times[job_aff].max();
+					}
+
+					bool successor_pending = false;
+					for (const auto& succ : successors_of[job]) {
+						auto to_job = succ.first->get_job_index();
+						if (!scheduled_jobs.contains(to_job))
+						{
+							successor_pending = true;
+							break;
+						}
+					}
+					if (successor_pending)
+						job_finish_times.emplace_back(job_ref, Interval<Time>(job_eft, job_lft));
+				}
+			}
+
+			// update the list of finish times of jobs with successors w.r.t. the previous system state
+			void update_job_finish_times(const Schedule_state& from,
+				const Job_ref j,
+				const Interval<Time>& start_time,
+				const Interval<Time>& finish_time,
+				const Successors& successors_of,
+				const Predecessors& predecessors_of,
+				const Dispatched_job_set& scheduled_jobs)
+			{
+				job_finish_times.reserve(job_finish_times.size() + 1);
+
+				// go through all the job finish times we had saved in the previous state, remove those 
+				// for which all pending successors completed and add the finish times of the jobs that 
+				// were just dispatched
+				auto ft = from.job_finish_times.begin();
+
+				Job_index j_idx = j->get_job_index();
+				unsigned int affinity = j->get_affinity();
+				bool added_j = false;
+
+				for (; ft != from.job_finish_times.end(); ++ft)
+				{
+					auto job_ref = ft->first;
+					auto job = job_ref->get_job_index();
+					auto job_eft = ft->second.min();
+					auto job_lft = ft->second.max();
+					auto job_aff = job_ref->get_affinity();
+
+					// if there is a single core, then we know that 
+					// jobs that were disptached in the past cannot have 
+					// finished later than when our new job starts executing
+					if (affinity == job_aff && clusters[job_aff].num_cpus() == 1)
+					{
+						if (job_lft > start_time.max())
+							job_lft = start_time.max();
+					}
+
+					if (!added_j && job > j_idx)
+					{
+						if (!successors_of[j_idx].empty())
+							job_finish_times.emplace_back(j, finish_time);
+						break;
+					}
+
+					bool successor_pending = false;
+					for (const auto& succ : successors_of[job]) {
+						auto to_job = succ.first->get_job_index();
+						if (!scheduled_jobs.contains(to_job))
+						{
+							successor_pending = true;
+							break;
+						}
+					}
+					if (successor_pending)
+						job_finish_times.emplace_back(job_ref, Interval<Time>(job_eft, job_lft));
+				}
+
+				if (!added_j)
+				{
+					if (!successors_of[j_idx].empty())
+						job_finish_times.emplace_back(j, finish_time);
+				}
+
+				for (; ft != from.job_finish_times.end(); ++ft)
+				{
+					auto job_ref = ft->first;
+					auto job = job_ref->get_job_index();
+					auto job_eft = ft->second.min();
+					auto job_lft = ft->second.max();
+					auto job_aff = job_ref->get_affinity();
+
+					// if there is a single core, then we know that 
+					// jobs that were disptached in the past cannot have 
+					// finished later than when our new job starts executing
+					if (affinity != NULL && clusters[job_aff].num_cpus() == 1)
+					{
+						if (job_lft > start_time.max())
+							job_lft = start_time.max();
 					}
 
 					bool successor_pending = false;
