@@ -7,6 +7,7 @@
 #include <ostream>
 #include <vector>
 #include <deque>
+#include <memory>
 
 #include "config.h"
 #include "cache.hpp"
@@ -26,9 +27,10 @@ namespace NP {
 
 		template<class Time> class Cluster_state
 		{
-		private:
-
+		public:
+			typedef std::shared_ptr<Cluster_state<Time>> Cluster_state_ref;
 			typedef std::vector<Interval<Time>> Core_availability;
+		private:
 			typedef std::vector<std::pair<const Job<Time>*, Interval<Time>>> Susp_list;
 			typedef std::vector<Susp_list> Successors;
 			typedef std::vector<Susp_list> Predecessors;
@@ -77,6 +79,15 @@ namespace NP {
 				, cluster_id{id}
 			{
 				assert(core_avail.size() > 0);
+			}
+
+			Cluster_state(const std::vector<Running_job>& certain_jobs, const Core_availability& core_avail, const Time earliest_certain_gang_source_job_disptach, const Time earliest_certain_successor_job_disptach, const unsigned int cluster_id)
+				: certain_jobs(std::move(certain_jobs))
+				, core_avail(std::move(core_avail))
+				, earliest_certain_gang_source_job_disptach(earliest_certain_gang_source_job_disptach)
+				, earliest_certain_successor_job_disptach(earliest_certain_successor_job_disptach)
+				, cluster_id(cluster_id)
+			{
 			}
 
 			// transition: new state by scheduling a job 'j' on 'ncores' cores in an existing state 'from'
@@ -145,7 +156,13 @@ namespace NP {
 				return earliest_certain_successor_job_disptach;
 			}
 
-			void set_earliest_certain_successor_job_disptach(Time next_certain_successor_job_disptach)
+			Cluster_state_ref set_earliest_certain_successor_job_disptach(Time next_certain_successor_job_disptach) const
+			{
+				return std::make_shared<Cluster_state<Time>>(certain_jobs, core_avail, earliest_certain_gang_source_job_disptach, next_certain_successor_job_disptach, cluster_id);
+				//earliest_certain_successor_job_disptach = next_certain_successor_job_disptach;
+			}
+
+			void set_in_place_earliest_certain_successor_job_disptach(Time next_certain_successor_job_disptach)
 			{
 				earliest_certain_successor_job_disptach = next_certain_successor_job_disptach;
 			}
@@ -192,9 +209,9 @@ namespace NP {
 			}
 
 			// check if 'other' state can merge with this state
-			bool can_merge_with(const Cluster_state<Time>& other, bool conservative, bool& other_in_this) const
+			bool can_merge_with(const Cluster_state_ref other, bool conservative, bool& other_in_this) const
 			{
-				return core_avail_overlap(other.core_avail, conservative, other_in_this);
+				return core_avail_overlap(other->core_avail, conservative, other_in_this);
 			}
 
 			bool can_merge_with(const Core_availability& cav, bool conservative, bool& other_in_this) const
@@ -203,23 +220,70 @@ namespace NP {
 			}
 
 			// first check if 'other' state can merge with this state, then, if yes, merge 'other' with this state.
-			bool try_to_merge(const Core_availability& other, bool conservative)
+			Cluster_state_ref try_to_merge(const Core_availability& other, bool conservative) const
 			{
 				if (!can_merge_with(other, conservative))
-					return false;
-
-				merge(other.core_avail, other.certain_jobs, other.earliest_certain_successor_job_disptach);
+					return nullptr;
 
 				DM("+++ merged " << other << " into " << *this << std::endl);
-				return true;
+				return merge(other.core_avail, other.certain_jobs, other.earliest_certain_successor_job_disptach);
 			}
 
-			void merge(const Cluster_state<Time>& other)
+			Cluster_state_ref merge(const Cluster_state_ref other) const
 			{
-				merge(other.core_avail, other.certain_jobs, other.earliest_certain_successor_job_disptach);
+				return merge(other->core_avail, other->certain_jobs, other->earliest_certain_successor_job_disptach);
 			}
 
-			void merge(
+			void merge_in_place(const Cluster_state_ref other)
+			{
+				merge_in_place(other->core_avail, other->certain_jobs, other->earliest_certain_successor_job_disptach);
+			}
+
+			Cluster_state_ref merge(
+				const Core_availability& cav,
+				const std::vector<Running_job>& cert_j,
+				Time ecsj_ready_time) const
+			{
+				// Copy core_avail to avoid modifying this object
+				auto new_core_avail = core_avail;
+				for (int i = 0; i < new_core_avail.size(); i++)
+					new_core_avail[i] |= cav[i];
+
+				// vector to collect joint certain jobs
+				std::vector<Running_job> new_cj;
+
+				// walk both sorted job lists to see if we find matches
+				auto it = certain_jobs.begin();
+				auto it_end = certain_jobs.end();
+				auto jt = cert_j.begin();
+				auto jt_end = cert_j.end();
+				while (it != it_end && jt != jt_end) {
+					if (it->idx == jt->idx) {
+						// same job
+						new_cj.emplace_back(it->idx, it->parallelism | jt->parallelism, it->finish_time | jt->finish_time);
+						it++;
+						jt++;
+					}
+					else if (it->idx < jt->idx)
+						it++;
+					else
+						jt++;
+				}
+
+				// update certain ready time of jobs with predecessors
+				Time t = std::max(earliest_certain_successor_job_disptach, ecsj_ready_time);
+
+				DM("+++ merged (cav,jft,cert_t) into " << *this << std::endl);
+
+				return std::make_shared<Cluster_state<Time>>(
+					new_cj,
+					new_core_avail,
+					earliest_certain_gang_source_job_disptach,
+					t,
+					cluster_id);
+			}
+
+			void merge_in_place(
 				const Core_availability& cav,
 				const std::vector<Running_job>& cert_j,
 				Time ecsj_ready_time)
