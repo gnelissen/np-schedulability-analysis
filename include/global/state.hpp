@@ -4,9 +4,12 @@
 #include <cassert>
 #include <iostream>
 #include <ostream>
+#include <set>
 
-#include <vector>
-#include <deque>
+#ifdef CONFIG_PARALLEL
+#include <tbb/spin_rw_mutex.h>
+#include <tbb/spin_mutex.h>
+#endif
 
 #include "config.h"
 #include "cache.hpp"
@@ -21,15 +24,18 @@ namespace NP {
 
 	namespace Global {
 
-		typedef Index_set Dispatched_job_set;
+		typedef Index_set Job_set;
 		typedef std::vector<Job_index> Job_precedence_set;
 
 		template<class Time> class State_space_data;
 
 		template<class Time> class Schedule_node;
 
+		// NOTE: Schedule_state is not thread-safe. Thread-safety must be enforced by callers.
 		template<class Time> class Schedule_state
 		{
+		private:
+			typedef typename State_space_data<Time>::Workload Workload;
 			typedef const Job<Time>* Job_ref;
 			typedef std::vector<std::pair<Job_ref, Interval<Time>>> Job_finish_times;
 			typedef std::vector<std::pair<Job_ref, Interval<Time>>> Susp_list;
@@ -41,34 +47,47 @@ namespace NP {
 			std::vector<Cluster_state_ref> clusters;
 			// job_finish_times holds the finish times of all the jobs that still have an unscheduled successor
 			Job_finish_times job_finish_times;
+			// earliest_certain_successor_job_disptach holds the earliest time a job with at least one predecessor 
+			// is certainly ready and certainly has enough free cores to start executing
+			std::vector<Time> earliest_certain_successor_job_disptach;
 
 		public:
 			// initial state -- nothing yet has finished, nothing is running
-			Schedule_state(const std::vector<unsigned int>& num_cpus, const State_space_data<Time>& spdata)
+			Schedule_state(const std::vector<unsigned int>& num_cpus, const State_space_data<Time>& state_space_data)
+			: earliest_certain_successor_job_disptach(num_cpus.size(), Time_model::constants<Time>::infinity())
 			{
 				assert(num_cpus.size() > 0);
 				clusters.reserve(num_cpus.size());
 				for (int i = 0; i < num_cpus.size(); i++)
 				{
-					clusters.push_back(std::make_shared<Cluster_state<Time>>(i, num_cpus[i], spdata.get_earliest_certain_gang_source_job_release(i)));
+					clusters.push_back(std::make_shared<Cluster_state<Time>>(i, num_cpus[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
 				}
 			}
 
-			// transition: new state by scheduling a job 'j' on 'ncores' cores in an existing state 'from'
+			Schedule_state(const std::vector<std::vector<Interval<Time>>>& proc_initial_state, const State_space_data<Time>& state_space_data)
+			: earliest_certain_successor_job_disptach(proc_initial_state.size(), Time_model::constants<Time>::infinity())
+			{
+				clusters.reserve(proc_initial_state.size());
+				for (int i = 0; i < proc_initial_state.size(); i++)
+				{
+					clusters.push_back(std::make_shared<Cluster_state<Time>>(i, proc_initial_state[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
+				}
+			}
+
+			// transition: new state by scheduling a job 'j' in an existing state 'from'
 			Schedule_state(
 				const Schedule_state& from,
 				const Job<Time>& j,
 				Interval<Time> start_times,
 				Interval<Time> finish_times,
-				const Dispatched_job_set& scheduled_jobs,
-				const std::vector<const Job<Time>*>& ready_succ_jobs,
+				const Job_set& scheduled_jobs,
+				const std::vector<Job_ref>& jobs_with_pending_succ,
+				const std::vector<std::vector<Job_ref>>& ready_succ_jobs,
 				const State_space_data<Time>& state_space_data,
 				Time next_source_job_rel,
 				unsigned int ncores = 1)
+				: earliest_certain_successor_job_disptach(from.clusters.size())
 			{
-				const Successors& successors_of = state_space_data.successors_suspensions;
-				const Predecessors& predecessors_of = state_space_data.predecessors_suspensions;
-				const Job_precedence_set & predecessors = state_space_data.predecessors_of(j);
 				clusters.reserve(from.clusters.size());
 				for (int i = 0; i < from.clusters.size(); i++) {
 					if (i == j.get_affinity())
@@ -77,55 +96,78 @@ namespace NP {
 						clusters.push_back(from.clusters[i]);
 				}
 				// save the job finish time of every job with a successor that is not executed yet in the current state
-				update_job_finish_times(from, &j, start_times, finish_times, successors_of, predecessors_of, scheduled_jobs);
-				updated_earliest_certain_successor_job_disptach(ready_succ_jobs, predecessors_of);
+				update_job_finish_times(from, j, start_times, finish_times, jobs_with_pending_succ);
+				// NOTE: must be done after the finish times and core availabilities have been updated
+				update_earliest_certain_successor_job_disptach(ready_succ_jobs, state_space_data.predecessors_suspensions);
 			}
 
-			// transition: new state by scheduling a set of jobs in an existing state
-			Schedule_state(
-				const Schedule_state& from,
-				const std::vector<const Job<Time>*>& j_set,
-				const std::vector<Interval<Time>>& start_times,
-				const std::vector<Interval<Time>>& finish_times,
-				const std::vector<unsigned int>& ncores,
-				const Dispatched_job_set& scheduled_jobs,
-				const std::vector<const Job<Time>*>& ready_succ_jobs,
-				const State_space_data<Time>& state_space_data,
-				const std::vector<Time>& next_source_job_rel)
+			// initial state -- nothing yet has finished, nothing is running
+			void reset(const std::vector<unsigned int>& num_cpus, const State_space_data<Time>& state_space_data)
 			{
-				assert(j_set.size() == from.clusters.size());
-				assert(start_times.size() == from.clusters.size());
-				assert(finish_times.size() == from.clusters.size());
-				assert(next_source_job_rel.size() == from.clusters.size());
-				assert(ncores.size() == from.clusters.size());
-
-				clusters.reserve(from.clusters.size());
-				for (int i = 0; i < from.clusters.size(); i++)
+				assert(num_cpus.size() > 0);
+				clusters.clear();
+				job_finish_times.clear();
+				clusters.reserve(num_cpus.size());
+				for (int i = 0; i < num_cpus.size(); i++)
 				{
-					const Job<Time>* j = j_set[i];
-					if (j == NULL)
-						clusters.push_back(from.cluster(i));
-					else
-					{
-						Job_index j_idx = j->get_job_index();
-						clusters.push_back(std::make_shared<Cluster_state<Time>>(from.cluster(i), j_idx, start_times[i], finish_times[i], scheduled_jobs, state_space_data, next_source_job_rel[i], ncores[i]));
-					}
+					clusters.push_back(std::make_shared<Cluster_state<Time>>(i, num_cpus[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
 				}
-				assert(clusters.size() == from.clusters.size());
-
-				// save the job finish time of every job with a successor that is not executed yet in the current state
-				const Successors& successors_of = state_space_data.successors_suspensions;
-				const Predecessors& predecessors_of = state_space_data.predecessors_suspensions;
-				update_job_finish_times(from, j_set, start_times, finish_times, successors_of, predecessors_of, scheduled_jobs);
-				updated_earliest_certain_successor_job_disptach(ready_succ_jobs, predecessors_of);
-
-				DM("*** new state: constructed " << *this << std::endl);
+				earliest_certain_successor_job_disptach = std::vector<Time>(num_cpus.size(), Time_model::constants<Time>::infinity());
 			}
 
-			const Cluster_state<Time>& cluster(unsigned int cluster_id) const
+			void reset(const std::vector<std::vector<Interval<Time>>>& proc_initial_state, const State_space_data<Time>& state_space_data)
 			{
-				assert(cluster_id < clusters.size());
-				return *clusters[cluster_id];
+				assert(proc_initial_state.size() > 0 && proc_initial_state[0].size() > 0);
+				clusters.clear();
+				job_finish_times.clear();
+				clusters.reserve(proc_initial_state.size());
+				for (int i = 0; i < proc_initial_state.size(); i++)
+				{
+					clusters.push_back(std::make_shared<Cluster_state<Time>>(i, proc_initial_state[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
+				}
+				earliest_certain_successor_job_disptach = std::vector<Time>(proc_initial_state.size(), Time_model::constants<Time>::infinity());
+			}
+
+			// transition: new state by scheduling a job 'j' in an existing state 'from'
+			void reset(
+				const Schedule_state& from,
+				const Job<Time>& j,
+				Interval<Time> start_times,
+				Interval<Time> finish_times,
+				const Job_set& scheduled_jobs,
+				const std::vector<Job_ref>& jobs_with_pending_succ,
+				const std::vector<std::vector<Job_ref>>& ready_succ_jobs,
+				const State_space_data<Time>& state_space_data,
+				Time next_source_job_rel,
+				unsigned int ncores = 1)
+			{
+				clusters.clear();
+				job_finish_times.clear();				
+				clusters.reserve(from.clusters.size());
+				for (int i = 0; i < from.clusters.size(); i++) {
+					if (i == j.get_affinity())
+						clusters.push_back(std::make_shared<Cluster_state<Time>>(from.cluster(i), j.get_job_index(), start_times, finish_times, scheduled_jobs, state_space_data, next_source_job_rel, ncores));
+					else
+						clusters.push_back(from.clusters[i]);
+				}
+				// save the job finish time of every job with a successor that is not executed yet in the current state
+				update_job_finish_times(from, j, start_times, finish_times, jobs_with_pending_succ);
+				// NOTE: must be done after the finish times and core availabilities have been updated
+				earliest_certain_successor_job_disptach.resize(from.clusters.size());
+				update_earliest_certain_successor_job_disptach(ready_succ_jobs, state_space_data.predecessors_suspensions);
+			}
+
+			// get the cluster state by its index
+			const Cluster_state<Time>& cluster(unsigned int idx) const
+			{
+				assert(idx < clusters.size());
+				return *(clusters[idx]);
+			}
+
+			Time next_certain_successor_jobs_disptach(const unsigned int cluster_id) const
+			{
+				assert(cluster_id < earliest_certain_successor_job_disptach.size());
+				return earliest_certain_successor_job_disptach[cluster_id];
 			}
 
 			// writes the finish time interval of job 'j' in 'ftimes' if the finish time of 'j' is known. Returns false if the finish time of 'j' is not known.
@@ -144,9 +186,9 @@ namespace NP {
 			}
 
 			// check if 'other' state can merge with this state
-			bool can_merge_with(const Schedule_state<Time>& other, bool conservative = false, bool use_job_finish_times = false) const
+			bool can_merge_with(const Schedule_state<Time>& other, bool conservative, bool use_job_finish_times = false) const
 			{
-				bool other_in_this;
+				bool other_in_this=false;
 				for (int i = 0; i < clusters.size(); i++) {
 					if (clusters[i] != other.clusters[i] && !clusters[i]->can_merge_with(other.clusters[i], conservative, other_in_this))
 						return false;
@@ -169,292 +211,104 @@ namespace NP {
 							clusters[i]->merge_in_place(other.clusters[i]);
 						else
 							clusters[i] = clusters[i]->merge(other.clusters[i]);
+						
+						earliest_certain_successor_job_disptach[i] = std::max(earliest_certain_successor_job_disptach[i], other.earliest_certain_successor_job_disptach[i]);
 					}
 				}
 
 				// merge job_finish_times
 				widen_finish_times(other.job_finish_times);
-
 				DM("+++ merged " << other << " into " << *this << std::endl);
 				return true;
 			}
 
-			void print_vertex_label(std::ostream& out,
-				const typename Job<Time>::Job_set& jobs) const
+			// output the state in CSV format
+			void export_state (std::ostream& stream, const Workload& jobs)
 			{
+				stream << "=====State=====\n";
 				for (int i = 0; i < clusters.size(); ++i)
 				{
-					out << "[";
-					clusters[i]->print_vertex_label(out, jobs);
-					out << "]";
+					stream << "## Cluster " << i << ": ##\n";
+					clusters[i]->export_state(stream, jobs);
+				}
+				stream << "Finish times predecessors: [<task_id>,<job_id>]:[<ft_min>,<ft_max>]\n";
+				// Jobs with pending successors: <job_id>,<ft_min>,<ft_max>\n
+				for (const auto& jft : job_finish_times) {
+					const auto& j = *(jft.first);
+					stream << "[" << j.get_task_id() << "," << j.get_job_id() << "]:[" << jft.second.min() << "," << jft.second.max() << "]\n";
 				}
 			}
 
 		private:
 
-			// Calculates the latest time a job 'j' is certainly ready if all its predecessors are completed.
-			// Returns infinity otherwise.
-			Time calculate_latest_ready_time(Job_ref j, const Predecessors& predecessors_of, const Schedule_state& prev_state, const std::vector<Job_ref>& j_set_newly_dispatched, const std::vector<Interval<Time>> finish_times, const Dispatched_job_set& scheduled_jobs)
-			{
-				Time avail = clusters[j->get_affinity()]->core_availability(j->get_min_parallelism()).max();
-				Time ready_time = std::max(avail, j->latest_arrival());
-				for (const auto& pred : predecessors_of[j->get_job_index()])
-				{
-					Interval<Time> ftimes(0, 0);
-					auto from_job = pred.first->get_job_index();
-					auto affinity = pred.first->get_affinity();
-					if (j_set_newly_dispatched[affinity]!=NULL && from_job == j_set_newly_dispatched[affinity]->get_job_index())
-					{
-						Time susp_max = pred.second.max();
-						ready_time = std::max(ready_time, finish_times[affinity].max() + susp_max);
-					}
-					else if (scheduled_jobs.contains(from_job) && prev_state.get_finish_times(from_job, ftimes))
-					{
-						Time susp_max = pred.second.max();
-						ready_time = std::max(ready_time, ftimes.max() + susp_max);
-					}
-					else
-					{
-						return Time_model::constants<Time>::infinity();
-					}
-				}
-				return ready_time;
-			}
-
 			// update the list of finish times of jobs with successors w.r.t. the previous system state
 			void update_job_finish_times(const Schedule_state& from,
-				const std::vector<Job_ref>& j_set,
-				const std::vector<Interval<Time>>& start_times,
-				const std::vector<Interval<Time>>& finish_times,
-				const Successors& successors_of,
-				const Predecessors& predecessors_of,
-				const Dispatched_job_set& scheduled_jobs)
+				const Job<Time>& j, 
+				const Interval<Time>& start_times,
+				const Interval<Time>& finish_times,
+				const std::vector<Job_ref>& jobs_with_pending_succ)
 			{
-				job_finish_times.reserve(job_finish_times.size() + clusters.size());
+				auto j_index = j.get_job_index();
+				auto affinity = j.get_affinity();
+				Time lst = start_times.max();
+				Time lft = finish_times.max();
 
-				// sort the jobs that are newly dispatched in increasing job index order
-				std::vector<std::pair<Job_ref, unsigned int>> newly_dispatched_j_sorted;
-				newly_dispatched_j_sorted.reserve(j_set.size());
-				for (unsigned int i = 0; i < clusters.size(); i++) {
-					if (j_set[i] != NULL)
-						newly_dispatched_j_sorted.emplace_back(j_set[i], i);
-				}
-				std::sort(newly_dispatched_j_sorted.begin(), newly_dispatched_j_sorted.end(),
-					[](const std::pair<Job_ref, unsigned int>& a, const std::pair<Job_ref, unsigned int>& b) {
-						return a.first->get_job_index() < b.first->get_job_index();
-					});
+				job_finish_times.reserve(jobs_with_pending_succ.size());
 
-				// go through all the job finish times we had saved in the previous state, remove those 
-				// for which all pending successors completed and add the finish times of the jobs that 
-				// were just dispatched
-				auto ft = from.job_finish_times.begin();
-
-				for (const auto& added_job : newly_dispatched_j_sorted)
+				auto it = from.job_finish_times.begin();
+				for (Job_ref job : jobs_with_pending_succ)
 				{
-					Job_ref j = added_job.first;
-					Job_index j_idx = j->get_job_index();
-					unsigned int affinity = added_job.second;
-					bool added_j = false;
-
-					for (; ft != from.job_finish_times.end(); ++ft)
-					{
-						auto job_ref = ft->first;
-						auto job = job_ref->get_job_index();
-						auto job_eft = ft->second.min();
-						auto job_lft = ft->second.max();
-						auto job_aff = job_ref->get_affinity();
-
-						// if there is a single core, then we know that 
-						// jobs that were disptached in the past cannot have 
+					auto job_index = job->get_job_index();
+					if (job_index == j_index)
+						job_finish_times.emplace_back(job, finish_times);
+					else {
+						// we find the finish time interval of `job` from the previous state. 
+						// Note that if `job` has non-completed successors in the new state,
+						// it must have had non-completed successors in the previous state too, 
+						// thus there is no risk to reach the end iterator
+						while (it->first != job) {
+							assert(it != from.job_finish_times.end());
+							it++;
+						}
+						Time job_eft = it->second.min();
+						Time job_lft = it->second.max();
+						// if both jobs execute on the same cluster and
+						// there is a single core, then we know that jobs that were
+						// dispatched in the past on that cluster cannot have
 						// finished later than when our new job starts executing
-						if (j_set[job_aff] != NULL && clusters[job_aff]->num_cpus() == 1)
+						if (job->get_affinity() == affinity && clusters[affinity]->num_cpus() == 1)
 						{
-							if (job_lft > start_times[job_aff].max())
-								job_lft = start_times[job_aff].max();
+							if (job_lft > lst)
+								job_lft = lst;
 						}
-
-						if (!added_j && job > j_idx)
-						{
-							if (!successors_of[j_idx].empty())
-								job_finish_times.emplace_back(j, finish_times[affinity]);
-							break;
-						}
-
-						bool successor_pending = false;
-						for (const auto& succ : successors_of[job]) {
-							auto to_job = succ.first->get_job_index();
-							if (!scheduled_jobs.contains(to_job))
-							{
-								successor_pending = true;
-								break;
-							}
-						}
-						if (successor_pending)
-							job_finish_times.emplace_back(job_ref, Interval<Time>(job_eft, job_lft));
+						job_finish_times.emplace_back(job, Interval<Time>{ job_eft, job_lft });
 					}
-
-					if (!added_j)
-					{
-						if (!successors_of[j_idx].empty())
-							job_finish_times.emplace_back(j, finish_times[affinity]);
-					}
-				}
-
-				for (; ft != from.job_finish_times.end(); ++ft)
-				{
-					auto job_ref = ft->first;
-					auto job = job_ref->get_job_index();
-					auto job_eft = ft->second.min();
-					auto job_lft = ft->second.max();
-					auto job_aff = job_ref->get_affinity();
-
-					// if there is a single core, then we know that 
-					// jobs that were disptached in the past cannot have 
-					// finished later than when our new job starts executing
-					if (j_set[job_aff] != NULL && clusters[job_aff]->num_cpus() == 1)
-					{
-						if (job_lft > start_times[job_aff].max())
-							job_lft = start_times[job_aff].max();
-					}
-
-					bool successor_pending = false;
-					for (const auto& succ : successors_of[job]) {
-						auto to_job = succ.first->get_job_index();
-						if (!scheduled_jobs.contains(to_job))
-						{
-							successor_pending = true;
-							break;
-						}
-					}
-					if (successor_pending)
-						job_finish_times.emplace_back(job_ref, Interval<Time>(job_eft, job_lft));
-				}
-			}
-
-			// update the list of finish times of jobs with successors w.r.t. the previous system state
-			void update_job_finish_times(const Schedule_state& from,
-				const Job_ref j,
-				const Interval<Time>& start_time,
-				const Interval<Time>& finish_time,
-				const Successors& successors_of,
-				const Predecessors& predecessors_of,
-				const Dispatched_job_set& scheduled_jobs)
-			{
-				job_finish_times.reserve(job_finish_times.size() + 1);
-
-				// go through all the job finish times we had saved in the previous state, remove those 
-				// for which all pending successors completed and add the finish times of the jobs that 
-				// were just dispatched
-				auto ft = from.job_finish_times.begin();
-
-				Job_index j_idx = j->get_job_index();
-				unsigned int affinity = j->get_affinity();
-				bool added_j = false;
-
-				for (; ft != from.job_finish_times.end(); ++ft)
-				{
-					auto job_ref = ft->first;
-					auto job = job_ref->get_job_index();
-					auto job_eft = ft->second.min();
-					auto job_lft = ft->second.max();
-					auto job_aff = job_ref->get_affinity();
-
-					// if there is a single core, then we know that 
-					// jobs that were disptached in the past cannot have 
-					// finished later than when our new job starts executing
-					if (affinity == job_aff && clusters[job_aff]->num_cpus() == 1)
-					{
-						if (job_lft > start_time.max())
-							job_lft = start_time.max();
-					}
-
-					if (!added_j && job > j_idx)
-					{
-						if (!successors_of[j_idx].empty())
-							job_finish_times.emplace_back(j, finish_time);
-						break;
-					}
-
-					bool successor_pending = false;
-					for (const auto& succ : successors_of[job]) {
-						auto to_job = succ.first->get_job_index();
-						if (!scheduled_jobs.contains(to_job))
-						{
-							successor_pending = true;
-							break;
-						}
-					}
-					if (successor_pending)
-						job_finish_times.emplace_back(job_ref, Interval<Time>(job_eft, job_lft));
-				}
-
-				if (!added_j)
-				{
-					if (!successors_of[j_idx].empty())
-						job_finish_times.emplace_back(j, finish_time);
-				}
-
-				for (; ft != from.job_finish_times.end(); ++ft)
-				{
-					auto job_ref = ft->first;
-					auto job = job_ref->get_job_index();
-					auto job_eft = ft->second.min();
-					auto job_lft = ft->second.max();
-					auto job_aff = job_ref->get_affinity();
-
-					// if there is a single core, then we know that 
-					// jobs that were disptached in the past cannot have 
-					// finished later than when our new job starts executing
-					if (affinity != NULL && clusters[job_aff]->num_cpus() == 1)
-					{
-						if (job_lft > start_time.max())
-							job_lft = start_time.max();
-					}
-
-					bool successor_pending = false;
-					for (const auto& succ : successors_of[job]) {
-						auto to_job = succ.first->get_job_index();
-						if (!scheduled_jobs.contains(to_job))
-						{
-							successor_pending = true;
-							break;
-						}
-					}
-					if (successor_pending)
-						job_finish_times.emplace_back(job_ref, Interval<Time>(job_eft, job_lft));
 				}
 			}
 
 			//calculate the earliest time a job with precedence constraints will become ready to dispatch
-			void updated_earliest_certain_successor_job_disptach(
-				const std::vector<const Job<Time>*>& ready_succ_jobs,
+			void update_earliest_certain_successor_job_disptach(
+				const std::vector<std::vector<Job_ref>>& ready_succ_jobs,
 				const Predecessors& predecessors_of)
 			{
-				std::vector<Time> earliest_certain_successor_job_disptach(clusters.size(), Time_model::constants<Time>::infinity());
+				std::fill(earliest_certain_successor_job_disptach.begin(), earliest_certain_successor_job_disptach.end(), Time_model::constants<Time>::infinity());
 				// we go through all successor jobs that are ready and update the earliest ready time
-				for (const Job<Time>* rj : ready_succ_jobs) {
-					auto affinity = rj->get_affinity();
-					Time avail = clusters[affinity]->core_availability(rj->get_min_parallelism()).max();
-					Time ready_time = std::max(avail, rj->latest_arrival());
-					for (const auto& pred : predecessors_of[rj->get_job_index()])
-					{
-						Interval<Time> ftimes(0, 0);
-						auto from_job = pred.first->get_job_index();
-						get_finish_times(from_job, ftimes);
-						Time susp_max = pred.second.max();
-						ready_time = std::max(ready_time, ftimes.max() + susp_max);
+				for (unsigned int cluster = 0; cluster < ready_succ_jobs.size(); cluster++)
+				{
+					for (const Job<Time>* rj : ready_succ_jobs[cluster]) {
+						Time avail = clusters[cluster]->core_availability(rj->get_min_parallelism()).max();
+						Time ready_time = std::max(avail, rj->latest_arrival());
+						for (const auto& pred : predecessors_of[rj->get_job_index()])
+						{
+							auto from_job = pred.first->get_job_index();
+							Interval<Time> ftimes(0, 0);
+							get_finish_times(from_job, ftimes);
+							Time susp_max = pred.second.max();
+							ready_time = std::max(ready_time, ftimes.max() + susp_max);
+						}
+						earliest_certain_successor_job_disptach[cluster] =
+							std::min(earliest_certain_successor_job_disptach[cluster], ready_time);
 					}
-					
-					earliest_certain_successor_job_disptach[affinity] =
-						std::min(earliest_certain_successor_job_disptach[affinity], ready_time);
-				}
-				
-				// update earliest successor job ready times on each cluster
-				for (int i = 0; i < clusters.size(); i++) {
-					if (clusters[i].unique())
-						clusters[i]->set_in_place_earliest_certain_successor_job_disptach(earliest_certain_successor_job_disptach[i]);
-					else if (clusters[i]->next_certain_successor_jobs_disptach() != earliest_certain_successor_job_disptach[i])
-						clusters[i] = clusters[i]->set_earliest_certain_successor_job_disptach(earliest_certain_successor_job_disptach[i]);
 				}
 			}
 
@@ -547,5 +401,4 @@ namespace NP {
 		};
 	}
 }
-
-#endif
+#endif // GLOBAL_STATE_HPP

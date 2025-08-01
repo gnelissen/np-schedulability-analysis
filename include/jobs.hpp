@@ -15,7 +15,6 @@ namespace NP {
 
 	typedef std::size_t hash_value_t;
 	typedef std::size_t Job_index;
-	#define NULL_JOB_INDEX -1
 
 	struct JobID {
 		unsigned long job;
@@ -50,12 +49,13 @@ namespace NP {
 		Interval<Time> arrival;
 		Interval<unsigned int> parallelism; // on which range of core numbers can it run in parallel
 		Cost exec_time; // execution time range depending on the number of cores assigned to the job to execute
+		Time bcet; // least execution time for the job among all its parallelism levels
 		Time deadline;
 		Priority priority;
 		JobID id;
+		unsigned int affinity; // which cluster of processors this job is pinned to
 		hash_value_t key;
 		Job_index index;  // RV: index in the jobs array of the workload.
-		unsigned int affinity; // ID of the cluster on which the job is assigned
 
 		void compute_hash() {
 			auto h = std::hash<Time>{};
@@ -77,35 +77,39 @@ namespace NP {
 			Interval<Time> arr, const Cost& costs,
 			Time dl, Priority prio,
 			Job_index idx,
-			unsigned long tid = 0,
-			unsigned int affinity = 0)
+			unsigned int affinity = 0,
+			unsigned long tid = 0)
 		: arrival(arr), exec_time(costs), parallelism(costs.begin()->first, costs.rbegin()->first),
 		  deadline(dl), priority(prio), id(id, tid), index(idx), affinity(affinity)
 		{
 			compute_hash();
+			if (exec_time.empty()) {
+				throw std::invalid_argument("Job must have at least one execution time defined.");
+			}
+			// compute the least execution time (bcet) for the job
+			bcet = Time_model::constants<Time>::infinity();
+			for (const auto& cost : costs) {
+				bcet = std::min(bcet, cost.second.min());
+			}
 		}
 
 		Job(unsigned long id,
 			Interval<Time> arr, Interval<Time> cost,
 			Time dl, Priority prio,
 			Job_index idx,
-			unsigned long tid = 0,
-			unsigned int affinity = 0)
+			unsigned int affinity = 0,
+			unsigned long tid = 0)
 			: arrival(arr), parallelism(Interval<unsigned int>{ 1, 1 }),
 			deadline(dl), priority(prio), id(id, tid), index(idx), affinity(affinity)
 		{
 			exec_time.emplace(1, cost);
+			bcet = cost.min();
 			compute_hash();
 		}
 
 		hash_value_t get_key() const
 		{
 			return key;
-		}
-
-		unsigned int get_affinity() const
-		{
-			return affinity;
 		}
 
 		Time earliest_arrival() const
@@ -143,6 +147,12 @@ namespace NP {
 				return cost->second.max();
 		}
 
+		Time get_bcet() const
+		{
+			return bcet;
+		}
+
+
 		// return the execution time bounds for a given level of parallelism
 		Interval<Time> get_cost(unsigned int ncores = 1) const
 		{
@@ -160,7 +170,7 @@ namespace NP {
 			return exec_time;
 		}
 
-		int get_next_higher_parallelism(unsigned int ncores) const
+		int get_next_parallelism(unsigned int ncores) const
 		{
 			assert(ncores < parallelism.max());
 			auto it = exec_time.upper_bound(ncores);
@@ -169,17 +179,6 @@ namespace NP {
 			else
 				return it->first;
 
-		}
-
-		int get_next_lower_parallelism(unsigned int ncores) const
-		{
-			auto it = exec_time.lower_bound(ncores);
-			if (it == exec_time.begin())
-				return -1;
-			else if (it == exec_time.end())
-				return parallelism.max();
-			else
-				return (--it)->first;
 		}
 
 		Priority get_priority() const
@@ -234,9 +233,14 @@ namespace NP {
 			return this->id == search_id;
 		}
 
-		Job_index get_job_index() const
+				Job_index get_job_index() const
 		{
 			return index;
+		}
+
+		unsigned int get_affinity() const
+		{
+			return affinity;
 		}
 
 		bool higher_priority_than(const Job &other) const

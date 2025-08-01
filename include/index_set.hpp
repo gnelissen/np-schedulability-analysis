@@ -1,6 +1,8 @@
 #ifndef INDEX_SET_H
 #define INDEX_SET_H
 
+#include <stdint.h>
+
 namespace NP {
 
 		class Index_set
@@ -12,6 +14,15 @@ namespace NP {
 			// new empty job set
 			Index_set() : the_set() {}
 
+			// new empty job set of a specific size
+			Index_set(size_t s) : the_set() {
+				the_set.reserve(s / 64 + 1);
+			}
+
+			Index_set(const Index_set& origin) {
+				the_set = origin.the_set;
+			}
+
 			// derive a new set by "cloning" an existing set and adding an index
 			Index_set(const Index_set& from, std::size_t idx)
 					: the_set(std::max(from.the_set.size(), (idx / 64) + 1))
@@ -20,13 +31,13 @@ namespace NP {
 				set_bit(idx, true);
 			}
 
-			// derive a new set by "cloning" an existing set and adding a set of indices
-			Index_set(const Index_set& from, const std::vector<std::size_t>& idx)
-				: the_set(std::max(from.the_set.size(), (*std::max_element(idx.begin(), idx.end()) / 64) + 1))
+			// derive a new set by "cloning" an existing set and adding an index
+			void set(const Index_set& from, std::size_t idx)
 			{
+				the_set.clear();
+				the_set.resize(std::max(from.the_set.size(), (idx / 64) + 1));
 				std::copy(from.the_set.begin(), from.the_set.end(), the_set.begin());
-				for(auto i : idx)
-					set_bit(i, true);
+				set_bit(idx, true);
 			}
 
 			// create the diff of two job sets (intended for debugging only)
@@ -36,6 +47,14 @@ namespace NP {
 				auto limit = std::min(a.the_set.size(), b.the_set.size());
 				for (std::size_t i = 0; i < limit; ++i)
 					the_set[i] = a.the_set[i] & ~b.the_set[i];
+			}
+
+			Index_set& operator=(const Index_set& other)
+			{
+				if (this != &other) {
+					the_set = other.the_set;
+				}
+				return *this;
 			}
 
 			bool operator==(const Index_set &other) const
@@ -79,11 +98,12 @@ namespace NP {
 
 			std::size_t size() const
 			{
-				std::size_t count = 0;
+				/*std::size_t count = 0;
 				for (std::size_t i = 0; i < the_set.size() * 64; ++i)
 					if (contains(i))
 						count++;
-				return count;
+				return count;*/
+				return  the_set.size() * 64;
 			}
 
 			void add(std::size_t idx)
@@ -91,6 +111,11 @@ namespace NP {
 				if (idx / 64 >= the_set.size())
 					the_set.resize((idx / 64) + 1, 0);
 				set_bit(idx, true);
+			}
+
+			void clear()
+			{
+				the_set.clear();
 			}
 
 			friend std::ostream& operator<< (std::ostream& stream,
@@ -133,9 +158,6 @@ namespace NP {
 				std::size_t bit_index = idx % 64;
 				return the_set[byte_index] & (((uint64_t)1) << bit_index);
 			}
-
-			// no accidental copies
-			Index_set(const Index_set& origin) = delete;
 		};
 }
 

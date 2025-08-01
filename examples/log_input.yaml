@@ -1,0 +1,28 @@
+# list of condition that must be respected to log a state and its transition
+Conditions:
+  # log what happens at or after time 500. [4, 10] would log what happens between time 4 and 10 included.
+  Time: [500, -]
+  # log information at depth 55 to 106 in the SAG
+  Depth: [55, 106]
+  # log states and transitions resulting from dispatching a job of task 0, 1 or 4
+  #Tasks: [0, 1, 4]
+  # only log states and transitions resulting from dispatching job with ID [0,2] or [0,3] or ...
+  Jobs: [[0,2], [0,3], [1,1], [1,5], [4,0]]
+  # only log states and transitions where jobs with ID [0,1] and [1,0] are already dispatched
+  Dispatched: [[6,68],[7,2]]
+  # only log states and transitions where jobs with ID [3,1] and [2,0] are not dispatched yet
+  NotDispatched: [[6,75], [1,0]]
+  # only log a state transition resulting to a deadline miss (yes/no)
+  DeadlineMiss: no
+
+# list of information that must be shown in the Graphviz dot file
+LoggedInfo:
+  DispatchedJob: yes
+  StartTime: yes
+  FinishTime: yes
+  JobParallelism: yes
+  CoresAvailability: yes
+  CertRunningJobs: no
+  PredFinishTimes: no
+  ReadySuccessors: yes
+  NodeKey: no

@@ -56,7 +56,7 @@ namespace NP {
 
 			// number of clusters and cores per cluster
 			const unsigned int num_clusters;
-			const std::vector<unsigned int> num_cpus;
+			std::vector<unsigned int> num_cpus;
 		
 		public:
 			// use these const references to ensure read-only access
@@ -73,15 +73,15 @@ namespace NP {
 			State_space_data(const Workload& jobs,
 				const Precedence_constraints& edges,
 				const Abort_actions& aborts,
-				const std::vector<unsigned int>& num_cpus)
+				const std::vector<std::vector<Interval<Time>>>& cores_initial_states)
 				: jobs(jobs)
-				, num_clusters(num_cpus.size())
-				, num_cpus(num_cpus)
-				, _successor_jobs_by_latest_arrival_by_cluster(num_cpus.size())
-				, _sequential_source_jobs_by_latest_arrival_by_cluster(num_cpus.size())
-				, _gang_source_jobs_by_latest_arrival_by_cluster(num_cpus.size())
-				, _jobs_by_earliest_arrival_by_cluster(num_cpus.size())
-				, _jobs_by_deadline(num_cpus.size())
+				, num_clusters(cores_initial_states.size())
+				, num_cpus(cores_initial_states.size())
+				, _successor_jobs_by_latest_arrival_by_cluster(cores_initial_states.size())
+				, _sequential_source_jobs_by_latest_arrival_by_cluster(cores_initial_states.size())
+				, _gang_source_jobs_by_latest_arrival_by_cluster(cores_initial_states.size())
+				, _jobs_by_earliest_arrival_by_cluster(cores_initial_states.size())
+				, _jobs_by_deadline(cores_initial_states.size())
 				, successor_jobs_by_latest_arrival_by_cluster(_successor_jobs_by_latest_arrival_by_cluster)
 				, sequential_source_jobs_by_latest_arrival_by_cluster(_sequential_source_jobs_by_latest_arrival_by_cluster)
 				, gang_source_jobs_by_latest_arrival_by_cluster(_gang_source_jobs_by_latest_arrival_by_cluster)
@@ -95,6 +95,10 @@ namespace NP {
 				, successors_suspensions(_successors_suspensions)
 				, abort_actions(jobs.size(), NULL)
 			{
+				for (unsigned int i = 0; i < num_clusters; i++) {
+					num_cpus[i] = cores_initial_states[i].size();
+				}
+
 				for (const auto& e : edges) {
 					_predecessors_suspensions[e.get_toIndex()].push_back({ &jobs[e.get_fromIndex()], e.get_suspension() });
 					_predecessors[e.get_toIndex()].push_back(e.get_fromIndex());
@@ -110,9 +114,9 @@ namespace NP {
 					}
 					else {
 						_gang_source_jobs_by_latest_arrival_by_cluster[j.get_affinity()].insert({ j.latest_arrival(), &j });
-					}
-					_jobs_by_earliest_arrival_by_cluster[j.get_affinity()].insert({ j.earliest_arrival(), &j });
+					}					
 					_jobs_by_deadline[j.get_affinity()].insert({ j.get_deadline(), &j });
+					_jobs_by_earliest_arrival_by_cluster[j.get_affinity()].insert({ j.earliest_arrival(), &j });
 				}
 
 				for (const Abort_action<Time>& a : aborts) {
@@ -142,7 +146,7 @@ namespace NP {
 			}
 
 			// returns the ready time interval of `j` in `s`
-			// assumes all predecessors of j are completed
+			// assumes all predecessors of j are dispatched
 			Interval<Time> ready_times(const State& s, const Job<Time>& j) const
 			{
 				Interval<Time> r = j.arrival_window();
@@ -151,8 +155,6 @@ namespace NP {
 					auto pred_idx = pred.first->get_job_index();
 					auto pred_susp = pred.second;
 					Interval<Time> ft{ 0, 0 };
-					//if (!s.get_finish_times(pred_idx, ft))
-					//	ft = get_finish_times(jobs[pred_idx]);
 					s.get_finish_times(pred_idx, ft);
 					r.lower_bound(ft.min() + pred_susp.min());
 					r.extend_to(ft.max() + pred_susp.max());
@@ -160,76 +162,134 @@ namespace NP {
 				return r;
 			}
 
-			// returns the ready time interval of `j` in `s` when dispatched on `ncores`
-			// assumes all predecessors of j are completed
-			// ignores the finish time of the predecessors in the `disregard` set.
-			Interval<Time> ready_times(
-				const State& s, const Job<Time>& j,
-				const Job_precedence_set& disregard,
-				const unsigned int ncores = 1) const
+			// Assuming that:
+			// - `j_low` is dispatched next, and
+			// - `j_high` is of higher priority than `j_low`, 
+			// - `j_low`and `j_high` have the same affinity, and
+			// - all predecessors of `j_high` have been dispatched
+			//
+			// this function computes the latest ready time of `j_high` in system state 's'.
+			//
+			// Let `ready_low` denote the earliest time at which `j_low` becomes ready
+			// and let `latest_ready_high` denote the return value of this function.
+			//
+			// If `latest_ready_high <= `ready_low`, the assumption that `j_low` is dispatched next lead to a contradiction,
+			// hence `j_low` cannot be dispatched next. In this case, the exact value of `latest_ready_high` is meaningless,
+			// except that it must be at most `ready_low`. After all, it was computed under an assumption that cannot happen.
+			Time conditional_latest_ready_time(
+				const Node& n, const State& s,
+				const Job<Time>& j_high, const Job_index j_low,
+				const unsigned int j_low_required_cores = 1) const
 			{
-				unsigned int affinity = j.get_affinity();
+				assert(j_high.get_affinity() == jobs[j_low].get_affinity());
+				assert(j_high.higher_priority_than(jobs[j_low]));
+				//assert(contains(n.get_ready_successor_jobs(j_high.get_affinity()), &j_high));
+				Time latest_ready_high = j_high.arrival_window().max();
+				unsigned int affinity = j_high.get_affinity();
 				const auto& cs = s.cluster(affinity);
-				Time avail_min = cs.earliest_finish_time();
-				Interval<Time> r = j.arrival_window();
 
-				// if the minimum parallelism of j is more than ncores, then 
-				// for j to be released and have its successors completed 
+				// if the minimum parallelism of j_high is more than j_low_required_cores, then
+				// for j_high to be released and have its successors completed
 				// is not enough to interfere with a lower priority job.
 				// It must also have enough cores free.
-				if (j.get_min_parallelism() > ncores)
+				if (j_high.get_min_parallelism() > j_low_required_cores)
 				{
 					// max {rj_max,Amax(sjmin)}
-					r.extend_to(cs.core_availability(j.get_min_parallelism()).max());
+					latest_ready_high = std::max(latest_ready_high, cs.core_availability(j_high.get_min_parallelism()).max());
 				}
 
-				for (const auto& pred : predecessors_suspensions[j.get_job_index()])
+				// j_high is not ready until all its predecessors have completed, and their corresponding suspension delays are over.
+				// But, since we are assuming that `j_low` is dispatched next and all predecessors of `j_high` have been dispatched,
+				// we can disregard some of them.
+				for (const auto& pred : predecessors_suspensions[j_high.get_job_index()])
 				{
+					const auto high_suspension = pred.second;
 					auto pred_idx = pred.first->get_job_index();
-					// skip if part of disregard
-					if (contains(disregard, pred_idx))
+
+					Interval<Time> ft{ 0, 0 };
+					s.get_finish_times(pred_idx, ft);
+
+					// If the suspension is 0 and j_pred is certainly finished when j_low is dispatched, then j_pred cannot postpone
+					// the (latest) ready time of j_high.
+					if (high_suspension.max() == 0) {
+
+						if (pred.first->get_affinity() == affinity) {
+							// If j_pred executes on the same cluster as j_low and there is a single core, 
+							// the predecessor of `j_high` must have finished when the core becomes available,
+							// since we assumed that all predecessors of `j_high` were already dispatched. Thus,
+							// j_pred must be finished before j_low is dispatched.
+							if (num_cpus[affinity] == 1) continue;
+
+							// The optimization above can be generalized to multiple cores, using the following knowledge:
+							// (1) When j_pred cannot postpone the ready time of j_high to a time instant *later than* the moment j_low can start,
+							//     we can safely disregard j_pred.
+							// (2) j_low cannot start until at least 1 core is available.
+							// (3) So if all cores are certainly occupied until j_pred is finished, we can disregard j_pred.
+							//
+							// We will prove the following claim: (ft(j) denotes the finish time of j and ca(n) denotes core_availability(n))
+							// (4) If ft(j_pred).max() < ca(2).min() then no core can be available before j_pred is finished.
+							// Proof:
+							// (A) Assume for a contradiction that a core becomes available at time T before j_pred is finished at time F > T.
+							//
+							// (B) Since a core became available at time T, it must hold that ca(1).min <= T <= ca(1).max().
+							//
+							// (C) Since j_pred finishes at time F > T, we know that at least 2 cores must be available at time F:
+							//     - the one that became available at time T, and
+							//     - the one used by j_pred
+							//
+							// (D) So ca(2).min() <= F <= ft(j_pred).max() hence ca(2).min() <= ft(j_pred).max().
+							//
+							// (E) this yields a contradiction with the condition ft(j_pred).max() < ca(2).min().
+							if (ft.max() < cs.core_availability(2).min()) continue;
+						}
+
+						// If at least one successor of j_pred has already been dispatched, and either it or j_pred has the same affinity as j_low, 
+						// then j_pred must have finished already when the first core on which j_low may be dispatched becomes available.
+						bool can_disregard = false;
+						for (const auto &successor_suspension : successors_suspensions[pred_idx]) {
+							const auto& succ = *successor_suspension.first;
+							if (dispatched(n, succ) &&
+								(succ.get_affinity() == affinity || pred.first->get_affinity() == affinity)) {
+								can_disregard = true;
+								break;
+							}
+						}
+						if (can_disregard) continue;
+					}
+
+					// If j_pred is a predecessor of both j_high and j_low, we can disregard it if the maximum suspension from j_pred to j_high
+					// is at most the minimum suspension from j_pred to j_low: susp_max(j_pred -> j_high) <= susp_min(j_pred -> j_low).
+					//
+					// To illustrate this, assume that j_low becomes ready at some time `t`. Then, due to the suspension, we know that
+					// j_pred must have finished no later than `t - susp_min(j_pred -> j_low)`, and that `j_pred` can only block `j_high`
+					// up to time `t + susp_max(j_pred -> j_high) - susp_min(j_pred -> j_low) <= t`. So either:
+					// - j_high is ready when j_low becomes ready, so the assumption that j_low is dispatched next must be false, or
+					// - something else causes j_high to become ready later than j_low, so this constraint is not important
+					// Either way, this constraint can be disregarded.
+					bool can_disregard = false;
+					for (const auto &pred_low : predecessors_suspensions[j_low]) {
+						// Note that the condition `susp_max(j_pred -> j_high) <= susp_min(j_pred -> j_low)` will be true if and only if there
+						// exists a constraint from j_pred to j_low whose *minimum* suspension is at least `susp_max(j_pred -> j_high)`. So we can
+						// stop searching as soon as we find one such constraint.
+						if (pred_low.first->get_job_index() == pred_idx && pred_low.second.min() >= high_suspension.max()) {
+							can_disregard = true;
+							break;
+						}
+					}
+					if (can_disregard) {
+						// Disregards *this* constraint, but other constraints from j_pred to j_high in predecessors_suspensions[j_high.get_job_index()]
+						// will be evaluated in their own iteration of this loop.
+						//
+						// Note that only the constraint with the largest *maximum* suspension from j_pred to j_high is important for
+						// the computation of susp_max(j_pred -> j_high), and that this is also the only constraint from j_pred to j_high that could
+						// affect the final value of latest_ready_high. Therefor, it is irrelevant whether other constraints from j_pred to j_high
+						// are disregarded.
 						continue;
+					}
 
-					// if the predecessor and the job j arre assigned on the same cluster and
-					// there is no suspension time and there is a single core in the cluster, then
-					// predecessors are finished as soon as the processor becomes available
-					auto pred_susp = pred.second;
-					unsigned int aff_pred = pred.first->get_affinity();
-					if (aff_pred == affinity && num_cpus[affinity] == 1 && pred_susp.max() == 0)
-					{
-						r.lower_bound(avail_min);
-						r.extend_to(avail_min);
-					}
-					else
-					{
-						Interval<Time> ft{ 0, 0 };
-						//if (!s.get_finish_times(pred_idx, ft))
-						//	ft = get_finish_times(jobs[pred_idx]);
-						s.get_finish_times(pred_idx, ft);
-						r.lower_bound(ft.min() + pred_susp.min());
-						r.extend_to(ft.max() + pred_susp.max());
-					}
+					latest_ready_high = std::max(latest_ready_high, ft.max() + high_suspension.max());
 				}
-				return r;
-			}
-
-			// returns the latest time at which `j` may become ready in `s`
-			// assumes all predecessors of `j` are completed
-			Time latest_ready_time(const State& s, const Job<Time>& j) const
-			{
-				return ready_times(s, j).max();
-			}
-
-			// returns the latest time at which `j_hp` may become ready in `s` when executing on `ncores`
-			// ignoring the finish time of all predecessors `j_hp` has in common with `j_ref`.
-			// assumes all predecessors of `j_hp` are completed
-			Time latest_ready_time(
-				const State& s, Time earliest_ref_ready,
-				const Job<Time>& j_hp, const Job<Time>& j_ref,
-				const unsigned int ncores = 1) const
-			{
-				auto rt = ready_times(s, j_hp, predecessors_of(j_ref), ncores);
-				return std::max(rt.max(), earliest_ref_ready);
+				return latest_ready_high;
 			}
 
 			// returns the earliest time at which `j` may become ready in `s`
@@ -266,7 +326,7 @@ namespace NP {
 						break; // yep, nothing can lower 'when' at this point
 
 					// j is not relevant if it is already scheduled or not of higher priority
-					if (j.higher_priority_than(reference_job) && ready(n, j))
+					if (not_dispatched(n, j) && j.higher_priority_than(reference_job))
 					{
 						when = j.latest_arrival();
 						// Jobs are ordered by latest_arrival, so next jobs are later. 
@@ -307,7 +367,7 @@ namespace NP {
 						break; // yep, nothing can lower 'when' at this point
 
 					// j is not relevant if it is already scheduled or not of higher priority
-					if (ready(n, j) && j.higher_priority_than(reference_job))
+					if (not_dispatched(n, j) && j.higher_priority_than(reference_job))
 					{
 						// if the minimum parallelism of j is more than ncores, then 
 						// for j to be released and have its successors completed 
@@ -332,41 +392,41 @@ namespace NP {
 				return when;
 			}
 
-			// Find next time by which a successor job (i.e., a job with predecessors) 
-			// of higher priority than the reference_job
-			// is certainly released in system state 's' at or before a time 'until'.
+			// Assuming that `reference_job` is dispatched next, find the earliest time by which a successor job (i.e., a job with predecessors) 
+			// of higher priority than the reference_job is certainly ready in system state 's'.
+			//
+			// Let `ready_min` denote the earliest time at which `reference_job` becomes ready
+			// and let `latest_ready_high` denote the return value of this function.
+			//
+			// If `latest_ready_high <= `ready_min`, the assumption that `reference_job` is dispatched next leads to a contradiction,
+			// hence `reference_job` cannot be dispatched next. In this case, the exact value of `latest_ready_high` is meaningless,
+			// except that it must be at most `ready_min` since it was computed under an assumption that cannot happen.
 			Time next_certain_higher_priority_successor_job_ready_time(
 				const Node& n,
 				const State& s,
 				const Job<Time>& reference_job,
-				const unsigned int ncores,
-				Time until = Time_model::constants<Time>::infinity()) const
-			{
+				const unsigned int ncores
+			) const {
+				
 				auto cluster_id = reference_job.get_affinity();
 				auto ready_min = earliest_ready_time(s, reference_job);
-				Time when = until;
+				Time latest_ready_high = Time_model::constants<Time>::infinity();
 
-				// a higer priority successor job cannot be ready before 
+				// a higher priority successor job cannot be ready before
 				// a job of any priority is released
-				Time t_earliest = n.earliest_job_release(cluster_id);
-				for (auto it = successor_jobs_by_latest_arrival_by_cluster[cluster_id].lower_bound(t_earliest);
-					it != successor_jobs_by_latest_arrival_by_cluster[cluster_id].end(); it++)
+				for (auto it = n.get_ready_successor_jobs(cluster_id).begin();
+					it != n.get_ready_successor_jobs(cluster_id).end(); it++)
 				{
-					const Job<Time>& j = *(it->second);
+					const Job<Time>& j_high = **it;
 
-					// check if we can stop looking
-					if (when < j.latest_arrival())
-						break; // yep, nothing can lower 'when' at this point
-
-					// j is not relevant if it is already scheduled or not of higher priority
-					if (ready(n, j) && j.higher_priority_than(reference_job)) {
+					// j_high is not relevant if it is already scheduled or not of higher priority
+					if (j_high.higher_priority_than(reference_job)) {
 						// does it beat what we've already seen?
-						when = std::min(when,
-							latest_ready_time(s, ready_min, j, reference_job, ncores));
-						// No break, as later jobs might have less suspension or require less cores to start executing.
+						latest_ready_high = std::min(latest_ready_high, conditional_latest_ready_time(n, s, j_high, reference_job.get_job_index(), ncores));
+						if (latest_ready_high <= ready_min) break;
 					}
 				}
-				return when;
+				return latest_ready_high;
 			}
 
 			// Find the earliest possible job release of all jobs in a node except for the ignored job
@@ -387,7 +447,7 @@ namespace NP {
 					DM("         * looking at " << j << std::endl);
 
 					// skip if it is the one we're ignoring or if it was dispatched already
-					if (&j == &ignored_job || !unfinished(n, j))
+					if (&j == &ignored_job || dispatched(n, j))
 						continue;
 
 					DM("         * found it: " << j.earliest_arrival() << std::endl);
@@ -418,7 +478,7 @@ namespace NP {
 					DM("         * looking at " << *jp << std::endl);
 
 					// skip if it is the one we're ignoring or the job was dispatched already
-					if (jp == &ignored_job || !unfinished(n, *jp))
+					if (jp == &ignored_job || dispatched(n, *jp))
 						continue;
 
 					DM("         * found it: " << jp->latest_arrival() << std::endl);
@@ -449,7 +509,7 @@ namespace NP {
 					DM("         * looking at " << *jp << std::endl);
 
 					// skip if it is the one we're ignoring or the job was dispatched already
-					if (jp == &ignored_job || !unfinished(n, *jp))
+					if (jp == &ignored_job || dispatched(n, *jp))
 						continue;
 
 					DM("         * found it: " << jp->latest_arrival() << std::endl);
@@ -460,6 +520,14 @@ namespace NP {
 				DM("         * No more future releases" << std::endl);
 				return rmax;
 			}
+
+			/*Time get_earliest_job_arrival() const
+			{
+				if (jobs_by_earliest_arrival.empty())
+					return Time_model::constants<Time>::infinity();
+				else
+					return jobs_by_earliest_arrival.begin()->first;
+			}*/
 
 			// Find the earliest certain job release of all sequential source jobs
 			// (i.e., without predecessors and with minimum parallelism = 1) when
@@ -487,19 +555,22 @@ namespace NP {
 			// (i.e., without predecessors) when the system starts
 			Time get_earliest_possible_source_job_release(unsigned int cluster_id) const
 			{
-				return jobs_by_earliest_arrival_by_cluster[cluster_id].begin()->first;
+				if (jobs_by_earliest_arrival_by_cluster[cluster_id].empty())
+					return Time_model::constants<Time>::infinity();
+				else
+					return jobs_by_earliest_arrival_by_cluster[cluster_id].begin()->first;
 			}
 
 		private:
-			// Check wether a job is ready (not dspatched yet and all its predecessors are completed).
-			bool ready(const Node& n, const Job<Time>& j) const
+
+			bool not_dispatched(const Node& n, const Job<Time>& j) const
 			{
-				return n.job_incomplete(j.get_job_index()) && n.job_ready(predecessors_of(j));
+				return n.job_not_dispatched(j.get_job_index());
 			}
 
-			bool unfinished(const Node& n, const Job<Time>& j) const
+			bool dispatched(const Node& n, const Job<Time>& j) const
 			{
-				return n.job_incomplete(j.get_job_index());
+				return n.job_dispatched(j.get_job_index());
 			}
 
 			State_space_data(const State_space_data& origin) = delete;

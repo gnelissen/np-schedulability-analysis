@@ -1,0 +1,15 @@
+Focus:
+ # only explore paths in the SAG that contain exclusively the jobs T1J1, T1J2, T2J1 and T2J2
+ jobset: [[1,1],[1,2],[2,1],[2,2]]
+ # only explore paths in the SAG that contain exclusively jobs of the Tasks 1 and 2 
+ taskset: [1, 2]
+
+Prune:
+ # stop exploring paths that dispatched one job of Task 3 or 4 or 5
+ tasks: [ 3, 4, 5]
+ # stop exploring paths that dispatched job T4J1 *or* T6J3
+ jobs: [[4,1], [6,3]]
+ # stop exploring paths that dispatched all the jobs T1J1 *and* T1J2 *and* T2J1 *and* T2J2, *or* all the jobs T2J1, T2,J2 *and* T3,J1
+ jobsets:
+  - [[1,1],[1,2],[2,1],[2,2]]
+  - [[2,1],[2,2],[3,1]]

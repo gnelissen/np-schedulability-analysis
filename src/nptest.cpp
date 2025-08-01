@@ -3,26 +3,9 @@
 #include <fstream>
 #include <algorithm>
 
-#ifdef _WIN32
-#define NOMINMAX
-#include <Windows.h>
-#include <psapi.h>
-#else
-#include <sys/resource.h>
-#endif
-
+#include "mem.hpp"
 #include "OptionParser.h"
-
 #include "config.h"
-
-#ifdef CONFIG_PARALLEL
-
-#include <oneapi/tbb/info.h>
-#include <oneapi/tbb/parallel_for.h>
-#include <oneapi/tbb/task_arena.h>
-
-#endif
-
 #include "problem.hpp"
 #include "global/space.hpp"
 #include "io.hpp"
@@ -38,94 +21,142 @@ static bool merge_use_job_finish_times;
 static int merge_depth;
 static bool want_dense;
 
+#ifdef CONFIG_PARALLEL
+static bool want_parallel = true;
+static unsigned int num_threads = 0;
+#endif
+
+#ifdef CONFIG_PRUNING
+static bool want_focus = false;
+static std::string focus_file;
+#endif
+
 static bool want_precedence = false;
 static std::string precedence_file;
 
 static bool want_aborts = false;
 static std::string aborts_file;
 
-static bool want_global = false;
+static bool want_multiprocessor = false;
 static unsigned int num_processors = 1;
 
-static bool want_partitioned = false;
+static bool platform_defined = false;
 static std::string platform_file;
 
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 static bool want_dot_graph;
+static std::string dot_file;
 #endif
+
 static double timeout;
+static long mem_max = 0; // in KiB
 static unsigned int max_depth = 0;
 
 static bool want_rta_file;
 static bool want_width_file;
+static bool want_deadline_miss_info;
 
 static bool continue_after_dl_miss = false;
-
-#ifdef CONFIG_PARALLEL
-static unsigned int num_worker_threads = 0;
-#endif
 
 struct Analysis_result {
 	bool schedulable;
 	bool timeout;
+	bool out_of_memory;
 	unsigned long long number_of_nodes, number_of_states, number_of_edges, max_width, number_of_jobs;
 	double cpu_time;
+#ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 	std::string graph;
+#endif
 	std::string response_times_csv;
 	std::string width_evolution_csv;
+	std::string deadline_mis_info;
 };
 
 
 template<class Time, class Space>
 static Analysis_result analyze(
-	std::istream &in,
-	std::istream &prec_in,
-	std::istream &aborts_in,
+	std::istream& in,
+	std::istream& prec_in,
+	std::istream& aborts_in,
 	std::istream& platform_in,
-    bool &is_yaml)
+	bool in_is_yaml,
+	bool dag_is_yaml,
+	bool aborts_is_yaml,
+	bool plat_is_yaml)
 {
-#ifdef CONFIG_PARALLEL
-	oneapi::tbb::task_arena arena(num_worker_threads ? num_worker_threads : oneapi::tbb::info::default_concurrency());
-#endif
-
-
 	// Parse input files and create NP scheduling problem description
-    typename NP::Job<Time>::Job_set jobs = is_yaml ? NP::parse_yaml_job_file<Time>(in) : NP::parse_csv_job_file<Time>(in);
+	typename NP::Job<Time>::Job_set jobs = in_is_yaml ? NP::parse_yaml_job_file<Time>(in) : NP::parse_csv_job_file<Time>(in);
+
 	// Parse precedence constraints
-	std::vector<NP::Precedence_constraint<Time>> edges = is_yaml ? NP::parse_yaml_dag_file<Time>(prec_in) : NP::parse_precedence_file<Time>(prec_in);
-	std::vector<unsigned int> clusters = want_partitioned ?
-		(is_yaml ? NP::parse_yaml_platform_file(platform_in) : NP::parse_csv_platform_file(platform_in))
-		: std::vector<unsigned int>{ num_processors };
+	std::vector<NP::Precedence_constraint<Time>> edges = dag_is_yaml ? NP::parse_yaml_dag_file<Time>(prec_in) : NP::parse_precedence_file<Time>(prec_in);
+
+	// Parse platform specification if provided
+	std::vector<std::vector<Interval<Time>>> platform_spec;
+	if (platform_defined) {
+		platform_spec = plat_is_yaml ? NP::parse_platform_spec_yaml<Time>(platform_in) : NP::parse_platform_spec_csv<Time>(platform_in);
+		// Update num_processors based on platform specification
+		//num_processors = platform_spec.size();
+	}
+	else {
+		platform_spec.resize(1, std::vector<Interval<Time>>(num_processors, { 0,0 }));
+	}
 
 	NP::Scheduling_problem<Time> problem{
-        jobs,
+		jobs,
 		edges,
 		NP::parse_abort_file<Time>(aborts_in),
-		clusters };
+		platform_spec };
 
 	// Set common analysis options
 	NP::Analysis_options opts;
 	opts.verbose = want_verbose;
 	opts.timeout = timeout;
+	opts.max_memory_usage = mem_max;
 	opts.max_depth = max_depth;
 	opts.early_exit = !continue_after_dl_miss;
 	opts.be_naive = want_naive;
 	opts.merge_conservative = merge_conservative;
 	opts.merge_depth = merge_depth;
 	opts.merge_use_job_finish_times = merge_use_job_finish_times;
-
+#ifdef CONFIG_PARALLEL
+	opts.parallel_enabled = want_parallel;
+	opts.num_threads = num_threads;
+#endif
+#ifdef CONFIG_PRUNING
+	// set pruning options if requested
+	if (want_focus && !focus_file.empty()) {
+		opts.pruning_active = true;
+		std::ifstream focus_in(focus_file);
+		if (!focus_in) {
+			std::cerr << "Error: could not open focus YAML file: " << focus_file << std::endl;
+			exit(1);
+		}
+		opts.pruning_cond = NP::parse_focused_expl_spec_yaml<Time>(focus_in, jobs);
+	}
+#endif
+#ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
+	NP::Global::Log_options<Time> log_opts;
+	log_opts.log = want_dot_graph;
+	NP::Global::Dot_file_config log_print_config;
+	if (not dot_file.empty()) {
+		auto dot_config_stream = std::ifstream();
+		dot_config_stream.open(dot_file);
+		log_opts.log_cond = NP::parse_log_config_yaml<Time>(dot_config_stream, jobs, log_print_config);
+	}
+	// Actually call the analysis engine
+	auto space = Space::explore(problem, opts, log_opts);
+#else
 	// Actually call the analysis engine
 	auto space = Space::explore(problem, opts);
-
-	// Extract the analysis results
-	auto graph = std::ostringstream();
-#ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
-	if (want_dot_graph)
-		graph << *space;
 #endif
 
+	// Extract the analysis results
+#ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
+	auto graph = std::ostringstream();
+	if (want_dot_graph)
+		space->print_dot_file(graph, log_print_config);
+#endif
 	auto rta = std::ostringstream();
-
 	if (want_rta_file) {
 		rta << "Task ID, Job ID, BCCT, WCCT, BCRT, WCRT" << std::endl;
 		for (const auto& j : problem.jobs) {
@@ -155,18 +186,30 @@ static Analysis_result analyze(
 		}
 	}
 
+	auto deadline_miss_stream = std::ostringstream();
+	bool schedulable = space->is_schedulable();
+	if(want_deadline_miss_info && !schedulable) {
+		auto deadline_miss_state = space->get_deadline_miss_state();
+		deadline_miss_state.first->export_node(deadline_miss_stream, jobs);
+		deadline_miss_state.second->export_state(deadline_miss_stream, jobs);
+	}
+
 	Analysis_result results = Analysis_result{
 		space->is_schedulable(),
 		space->was_timed_out(),
+		space->out_of_memory(),
 		space->number_of_nodes(),
 		space->number_of_states(),
 		space->number_of_edges(),
 		space->max_exploration_front_width(),
 		(unsigned long)(problem.jobs.size()),
 		space->get_cpu_time(),
+#ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 		graph.str(),
+#endif
 		rta.str(),
-		width_stream.str()
+		width_stream.str(),
+		deadline_miss_stream.str()
 	};
 	delete space;
 	return results;
@@ -176,13 +219,20 @@ static Analysis_result process_stream(
 	std::istream &in,
 	std::istream &prec_in,
 	std::istream &aborts_in,
-	std::istream& platform_in,
-    bool is_yaml)
+	std::istream &platform_in,
+	bool in_is_yaml = false, 
+	bool dag_is_yaml = false, 
+	bool aborts_is_yaml = false, 
+	bool plat_is_yaml = false)
 {
-	if (want_dense)
-		return analyze<dense_t, NP::Global::State_space<dense_t>>(in, prec_in, aborts_in, platform_in, is_yaml);
+	if (want_multiprocessor && want_dense)
+		return analyze<dense_t, NP::Global::State_space<dense_t>>(in, prec_in, aborts_in, platform_in, in_is_yaml, dag_is_yaml, aborts_is_yaml, plat_is_yaml);
+	else if (want_multiprocessor && !want_dense)
+		return analyze<dtime_t, NP::Global::State_space<dtime_t>>(in, prec_in, aborts_in, platform_in, in_is_yaml, dag_is_yaml, aborts_is_yaml, plat_is_yaml);
+	else if (want_dense)
+		return analyze<dense_t, NP::Global::State_space<dense_t>>(in, prec_in, aborts_in, platform_in, in_is_yaml, dag_is_yaml, aborts_is_yaml, plat_is_yaml);
 	else
-		return analyze<dtime_t, NP::Global::State_space<dtime_t>>(in, prec_in, aborts_in, platform_in, is_yaml);
+		return analyze<dtime_t, NP::Global::State_space<dtime_t>>(in, prec_in, aborts_in, platform_in, in_is_yaml, dag_is_yaml, aborts_is_yaml, plat_is_yaml);
 }
 
 static void process_file(const std::string& fname)
@@ -197,14 +247,50 @@ static void process_file(const std::string& fname)
 		auto aborts_stream = std::ifstream();
 		auto platform_stream = std::ifstream();
 
-		if (want_precedence)
+		bool in_is_yaml = false, dag_is_yaml = false, aborts_is_yaml = false, plat_is_yaml = false;
+		
+		// check the extension of the job input file
+		if (fname != "-") {
+			std::string ext = fname.substr(fname.find_last_of(".") + 1);
+			if (ext == "yaml" || ext == "yml") {
+				in_is_yaml = true;
+			}
+		}
+
+		if (in_is_yaml && want_precedence) {
+			std::cerr << "Error: conflict between job input file and precedence constraints file. Job input file in YAML formal already contains precedence constraints specification." << std::endl;
+			exit(1);
+		}
+		
+		if (want_precedence) {
 			dag_stream.open(precedence_file);
+		} 
+		else if (in_is_yaml) {
+			// if precedence file is not given, but input file is in YAML, we assume that the precedence constraints are in the input file
+			dag_stream.open(fname);
+			want_precedence = true;
+			dag_is_yaml = true;
+		} 
 
-		if (want_aborts)
+		if (want_aborts) {
 			aborts_stream.open(aborts_file);
+			//check the extension of the file
+			std::string ext = aborts_file.substr(aborts_file.find_last_of(".") + 1);
+			if (ext == "yaml" || ext == "yml") {
+				aborts_is_yaml = true;
+				std::cerr << "Error: YAML abort file is not supported yet, use CSV format instead." << std::endl;
+				exit(1);
+			}
+		}
 
-		if (want_partitioned)
+		if (platform_defined) {
 			platform_stream.open(platform_file);
+			//check the extension of the file
+			std::string ext = platform_file.substr(platform_file.find_last_of(".") + 1);
+			if (ext == "yaml" || ext == "yml") {
+				plat_is_yaml = true;
+			}
+		}
 
 		std::istream &dag_in = want_precedence ?
 			static_cast<std::istream&>(dag_stream) :
@@ -214,41 +300,35 @@ static void process_file(const std::string& fname)
 			static_cast<std::istream&>(aborts_stream) :
 			static_cast<std::istream&>(empty_aborts_stream);
 
-		std::istream& platform_in = want_partitioned ?
+		std::istream &platform_in = platform_defined ?
 			static_cast<std::istream&>(platform_stream) :
 			static_cast<std::istream&>(empty_platform_stream);
 
 		if (fname == "-")
 		{
-			result = process_stream(std::cin, dag_in, aborts_in, platform_in, false);
+			result = process_stream(std::cin, dag_in, aborts_in, platform_in);
 		}
 		else {
-            // check the extension of the file
-            std::string ext = fname.substr(fname.find_last_of(".") + 1);
-            bool is_yaml = false;
-            if (ext == "yaml" || ext == "yml") {
-                is_yaml = true;
-            }
-
-			auto in = std::ifstream(fname, std::ios::in);
-			result = process_stream(in, dag_in, aborts_in, platform_in, is_yaml);
+            auto in = std::ifstream(fname, std::ios::in);
+			result = process_stream(in, dag_in, aborts_in, platform_in, in_is_yaml, dag_is_yaml, aborts_is_yaml, plat_is_yaml);
 
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 			if (want_dot_graph) {
 				DM("\nDot graph being made\n");
 				std::string dot_name = fname;
-				auto p = is_yaml ? dot_name.find(".yaml") : dot_name.find(".csv");
+				auto p = dot_name.find_last_of(".");
 				if (p != std::string::npos) {
 					dot_name.replace(p, std::string::npos, ".dot");
-					auto out  = std::ofstream(dot_name,  std::ios::out);
+					auto out = std::ofstream(dot_name, std::ios::out);
 					out << result.graph;
 					out.close();
 				}
 			}
 #endif
+
 			if (want_rta_file) {
 				std::string rta_name = fname;
-				auto p = is_yaml ? rta_name.find(".yaml") : rta_name.find(".csv");
+				auto p = rta_name.find_last_of(".");
 				if (p != std::string::npos) {
 					rta_name.replace(p, std::string::npos, ".rta.csv");
 					auto out  = std::ofstream(rta_name,  std::ios::out);
@@ -259,7 +339,7 @@ static void process_file(const std::string& fname)
 
 			if (want_width_file) {
 				std::string width_file_name = fname;
-				auto p = is_yaml ? width_file_name.find(".yaml") : width_file_name.find(".csv");
+				auto p = width_file_name.find_last_of(".");
 				if (p != std::string::npos) {
 					width_file_name.replace(p, std::string::npos, ".width.csv");
 					auto out = std::ofstream(width_file_name, std::ios::out);
@@ -267,20 +347,21 @@ static void process_file(const std::string& fname)
 					out.close();
 				}
 			}
+
+			if (want_deadline_miss_info && !result.schedulable && !result.deadline_mis_info.empty()) {
+				std::string dl_miss_file_name = fname;
+				auto p = dl_miss_file_name.find_last_of(".");
+				if (p != std::string::npos) {
+					dl_miss_file_name.replace(p, std::string::npos, ".dl_miss.txt");
+					auto out = std::ofstream(dl_miss_file_name, std::ios::out);
+					out << result.deadline_mis_info;
+					out.close();
+				}
+			}
 		}
 
-#ifdef _WIN32
-		PROCESS_MEMORY_COUNTERS pmc;
-		auto currentProcess = GetCurrentProcess();
-		GetProcessMemoryInfo(currentProcess, &pmc, sizeof(pmc));
-		long mem_used = pmc.PeakWorkingSetSize / 1024; //in kiB
-		CloseHandle(currentProcess);
-#else
-		struct rusage u;
-		long mem_used = 0;
-		if (getrusage(RUSAGE_SELF, &u) == 0)
-			mem_used = u.ru_maxrss;
-#endif
+		Memory_monitor mem;
+		long mem_used = mem;
 
 		std::cout << fname;
 
@@ -291,23 +372,16 @@ static void process_file(const std::string& fname)
 			std::cout << ",  " << (int) result.schedulable;
 
 		std::cout << ",  " << result.number_of_jobs
-			<< ",  " << result.number_of_nodes
-			<< ",  " << result.number_of_states
-			<< ",  " << result.number_of_edges
-			<< ",  " << result.max_width
-			<< ",  " << std::fixed << result.cpu_time
-			<< ",  " << ((double)mem_used) / (1024.0)
-			<< ",  " << (int)result.timeout;
-		if (want_partitioned)
-		{
-			std::cout << ",  clustered"
-				<< std::endl;
-		}
-		else
-		{
-			std::cout << ",  " << num_processors
-				<< std::endl;
-		}
+			  << ",  " << result.number_of_nodes
+		          << ",  " << result.number_of_states
+		          << ",  " << result.number_of_edges
+		          << ",  " << result.max_width
+		          << ",  " << std::fixed << result.cpu_time
+		          << ",  " << ((double) mem_used) / (1024.0)
+		          << ",  " << (int) result.timeout
+				  << ",  " << (int)result.out_of_memory
+		          << ",  " << num_processors
+		          << std::endl;
 	} catch (std::ios_base::failure& ex) {
 		std::cerr << fname;
 		if (want_precedence)
@@ -350,6 +424,7 @@ static void print_header(){
 	          << ", CPU time"
 	          << ", memory"
 	          << ", timeout"
+			  << ", mem_out"
 	          << ", #CPUs"
 	          << std::endl;
 }
@@ -381,13 +456,13 @@ int main(int argc, char** argv)
 	      .help("maximum CPU time allowed (in seconds, zero means no limit)")
 	      .set_default("0");
 
+	parser.add_option("--mem-limit").dest("mem_max")
+		.help("maximum memory consumption allowed (in KiB, zero means no limit)")
+		.set_default("0");
+
 	parser.add_option("-d", "--depth-limit").dest("depth")
 	      .help("abort graph exploration after reaching given depth (>= 2)")
 	      .set_default("0");
-
-	/*parser.add_option("-n", "--naive").dest("naive").set_default("0")
-	      .action("store_const").set_const("1")
-	      .help("use the naive exploration method (default: merging)");*/
 
 	parser.add_option("-p", "--precedence").dest("precedence_file")
 	      .help("name of the file that contains the job set's precedence DAG")
@@ -398,25 +473,17 @@ int main(int argc, char** argv)
 	      .set_default("");
 
 	parser.add_option("-m", "--multiprocessor").dest("num_processors")
-	      .help("set the number of processors of the platform. Mutually exclusive with --platform.")
+	      .help("set the number of processors of the platform")
 	      .set_default("1");
 
 	parser.add_option("--platform").dest("platform_file")
-		.help("name of the file that contains the platform architecture. Mutually exclusive with --multiprocessor.")
-		.set_default("");
-
-	parser.add_option("--threads").dest("num_threads")
-	      .help("set the number of worker threads (parallel analysis)")
-	      .set_default("0");
+	      .help("name of the file that contains the platform specification (CSV or YAML)")
+	      .set_default("");
 
 	parser.add_option("--header").dest("print_header")
 	      .help("print a column header")
 	      .action("store_const").set_const("1")
 	      .set_default("0");
-
-	parser.add_option("-g", "--save-graph").dest("dot").set_default("0")
-	      .action("store_const").set_const("1")
-	      .help("store the state graph in Graphviz dot format (default: off)");
 
 	parser.add_option("--verbose").dest("verbose").set_default("0")
 		.action("store_const").set_const("1")
@@ -426,12 +493,41 @@ int main(int argc, char** argv)
 	      .action("store_const").set_const("1")
 	      .help("Reporting: store the best- and worst-case response times and store the evolution of the width of the graph (default: off)");
 
+	parser.add_option("--miss_info").dest("miss_info").set_default("0")
+		.action("store_const").set_const("1")
+		.help("Report information on the deadline miss state if a deadline miss occurs (default: off)");
+
 	parser.add_option("-c", "--continue-after-deadline-miss")
 	      .dest("go_on_after_dl").set_default("0")
 	      .action("store_const").set_const("1")
 	      .help("do not abort the analysis on the first deadline miss "
 	            "(default: off)");
 
+	parser.add_option("-g", "--save-graph").dest("want_dot").set_default("0")
+		.action("store_const").set_const("1")
+		.help("Records the state graph in Graphviz dot format (default: off).");
+
+	parser.add_option("--log_opts").dest("dot_file")
+		.help("If 'save-graph is set', allows to pass a YAML file configuring what part of the state graph is recorded and what is printed in the state graph. Default: complete state space is recorded and default info is printed.")
+		.set_default("");
+
+#ifdef CONFIG_PARALLEL
+	parser.add_option("--parallel").dest("parallel").set_default("1")
+		.action("store_const").set_const("1")
+		.help("enable parallel execution (default: on when compiled with CONFIG_PARALLEL)");
+
+	parser.add_option("--no-parallel").dest("parallel").set_default("1")
+		.action("store_const").set_const("0")
+		.help("disable parallel execution");
+
+	parser.add_option("--threads").dest("num_threads")
+		.help("number of threads to use (0 = auto-detect)")
+		.set_default("0");
+#endif
+
+	parser.add_option("-f", "--focus").dest("focus_file")
+		.help("If 'USE_PRUNING' is set, allows to send a YAML file specifying what part of the state-space to focus on or prune during the exploration.")
+		.set_default("");
 
 	auto options = parser.parse_args(argc, argv);
 	//all the options that could have been entered above are processed below and appropriate variables
@@ -455,7 +551,7 @@ int main(int argc, char** argv)
 		merge_conservative = true;
 		merge_use_job_finish_times = true;
 	}
-	if (merge_opts == "l2")
+	else if (merge_opts == "l2")
 		merge_depth = 2;
 	else if (merge_opts == "l3")
 		merge_depth = 3;
@@ -467,9 +563,9 @@ int main(int argc, char** argv)
 	std::string time_model = (const std::string&)options.get("time_model");
 	want_dense = time_model == "dense";
 
-	//want_naive = options.get("naive");
-
 	timeout = options.get("timeout");
+
+	mem_max = options.get("mem_max");
 
 	max_depth = options.get("depth");
 	if (options.is_set_by_user("depth")) {
@@ -496,47 +592,76 @@ int main(int argc, char** argv)
 	}
 	aborts_file = (const std::string&) options.get("abort_file");
 
-	want_global = options.is_set_by_user("num_processors");
-	num_processors = options.get("num_processors");
-	if (!num_processors || num_processors > MAX_PROCESSORS) {
-		std::cerr << "Error: invalid number of processors\n" << std::endl;
-		return 1;
-	}
 
-	want_partitioned = options.is_set_by_user("platform_file");
-	platform_file = (const std::string&)options.get("platform_file");
-	if (want_global && want_partitioned) {
-		std::cerr << "Error: options --platform and --multiprocessor are mutually exclusive.\n" << std::endl;
-		return 1;
+	platform_defined = options.is_set_by_user("platform_file");
+	if (platform_defined) {
+		want_multiprocessor = true;
+		platform_file = (const std::string&) options.get("platform_file");
+		if (platform_file.empty()) {
+			std::cerr << "Error: platform file not specified" << std::endl;
+			return 1;
+		}
+		if (options.is_set_by_user("num_processors")) {
+			std::cerr << "Error: options --platform and -m are exclusive." << std::endl;
+			return 1; // num_processors is set by platform file, not by user
+		}
+	}
+	else {
+		want_multiprocessor = options.is_set_by_user("num_processors");
+		num_processors = options.get("num_processors");
+		if (!num_processors || num_processors > MAX_PROCESSORS) {
+			std::cerr << "Error: invalid number of processors\n" << std::endl;
+			return 1;
+		}
 	}
 
 	want_rta_file = options.get("rta");
 	want_width_file = options.get("rta");
+	want_deadline_miss_info = options.get("miss_info");
 
 	want_verbose = options.get("verbose");
 
 	continue_after_dl_miss = options.get("go_on_after_dl");
 
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
-	want_dot_graph = options.get("dot");
-	DM("Dot graph"<<want_dot_graph<<std::endl);
+	want_dot_graph = options.is_set_by_user("want_dot");
+	if (want_dot_graph)
+		dot_file = (const std::string&)options.get("dot_file");
+	else if (options.is_set_by_user("dot_file")) {
+		std::cerr << "Warning: log options are set but log of state graph is not activated ('-g' or '--save-graph' not set). "
+			<< "The content of the file passed in argument with '--log_opts' will be ignored." << std::endl;
+	}
 #else
-	if (options.is_set_by_user("dot")) {
+	if (options.is_set_by_user("want_dot")) {
 		std::cerr << "Error: graph collection support must be enabled "
-		          << "during compilation (CONFIG_COLLECT_SCHEDULE_GRAPH "
-		          << "is not set)." << std::endl;
+			<< "during compilation (CONFIG_COLLECT_SCHEDULE_GRAPH "
+			<< "is not set)." << std::endl;
 		return 2;
 	}
 #endif
 
 #ifdef CONFIG_PARALLEL
-	num_worker_threads = options.get("num_threads");
+	want_parallel = options.get("parallel");
+	num_threads = options.get("num_threads");
+#ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
+	if (want_parallel && want_dot_graph) {
+		std::cerr << "Warning: Parallel execution is not compatible with "
+		          << "schedule graph collection. Disabling parallel execution." 
+		          << std::endl;
+		want_parallel = false;
+	}
+#endif
+#endif
+#ifdef CONFIG_PRUNING
+	want_focus = options.is_set_by_user("focus_file");
+	focus_file = (const std::string&)options.get("focus_file");
 #else
-	if (options.is_set_by_user("num_threads")) {
-		std::cerr << "Error: parallel analysis must be enabled "
-		          << "during compilation (CONFIG_PARALLEL "
-		          << "is not set)." << std::endl;
-		return 3;
+	if(options.is_set_by_user("focus_file"))
+	{
+		std::cerr << "Error: Focused exploration support must be enabled "
+				  << "during compilation (CONFIG_PRUNING is not set)."
+				  << std::endl;
+		return 2;
 	}
 #endif
 
