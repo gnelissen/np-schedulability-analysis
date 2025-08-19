@@ -7,6 +7,9 @@
 #ifdef CONFIG_PRUNING
 #include "pruning_cond.hpp"
 #endif
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+#include "global/extension/problem_extension.hpp"
+#endif
 
 namespace NP {
 
@@ -30,6 +33,11 @@ namespace NP {
 		// initial state (availability intervals) of the identical processors 
 		// on which the jobs are being dispatched (globally, in priority order)
 		std::vector<Interval<Time>> processors_initial_state;
+
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+		// ** Potential extensions to the scheduling problem (e.g., task chains)
+		Problem_extensions problem_extensions;
+#endif // CONFIG_ANALYSIS_EXTENSIONS
 
 		// Classic default setup: no abort actions
 		Scheduling_problem(const Workload& jobs, const Precedence_constraints& prec,

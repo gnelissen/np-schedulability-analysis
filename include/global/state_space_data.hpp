@@ -15,6 +15,10 @@
 #include "problem.hpp"
 #include "global/state.hpp"
 
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+#include "global/extension/state_space_data_extension.hpp"
+#endif // CONFIG_ANALYSIS_EXTENSIONS
+
 namespace NP {
 	namespace Global {
 
@@ -56,7 +60,12 @@ namespace NP {
 
 			// number of cores
 			const unsigned int num_cpus;
-		
+
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+			// possible extensions of the state space data (e.g., for task chains analysis)
+			State_space_data_extensions extensions;
+#endif // CONFIG_ANALYSIS_EXTENSIONS
+					
 		public:
 			// use these const references to ensure read-only access
 			const Workload& jobs;
@@ -127,6 +136,18 @@ namespace NP {
 					const Job<Time>& j = lookup<Time>(jobs, a.get_id());
 					abort_actions[j.get_job_index()] = &a;
 				}
+			}
+
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+			const State_space_data_extensions& get_extensions() const
+			{
+				return extensions;
+			}
+#endif // CONFIG_ANALYSIS_EXTENSIONS
+
+			size_t get_num_cpus() const
+			{
+				return num_cpus;
 			}
 
 			size_t num_jobs() const
