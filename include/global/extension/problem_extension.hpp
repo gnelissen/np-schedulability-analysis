@@ -56,10 +56,8 @@ namespace NP
 		}
 
 	private:
-		static std::vector<std::unique_ptr<Problem_extension_base>> extensions;
+		static std::vector<std::unique_ptr<Problem_extension_base>> extensions; // defined in src/extensions.cpp
 	};
-
-	std::vector<std::unique_ptr<Problem_extension_base>> Problem_extensions::extensions;
 } // namespace NP
 
 #endif // !PROBLEM_EXTENSION_HPP

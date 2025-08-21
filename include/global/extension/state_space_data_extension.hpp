@@ -48,10 +48,8 @@ namespace NP {
 			}
 
 		private:
-			static std::vector<std::unique_ptr<State_space_data_extension>> extensions;
+			static std::vector<std::unique_ptr<State_space_data_extension>> extensions; // defined in src/extensions.cpp
 		};
-
-		std::vector<std::unique_ptr<State_space_data_extension>> State_space_data_extensions::extensions;
 	}
 }
 

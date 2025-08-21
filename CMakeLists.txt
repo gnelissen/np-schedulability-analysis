@@ -102,10 +102,11 @@ add_definitions(
         -DVERSION_PATCH=${NP_schedulabiliy_test_VERSION_PATCH}
 )
 
+set(SOURCES src/extensions.cpp)
 file(GLOB TEST_SOURCES "src/tests/*.cpp")
 add_executable(runtests ${TEST_SOURCES} ${SOURCES})
 
-set(NPTEST_SOURCES src/nptest.cpp lib/src/OptionParser.cpp)
+set(NPTEST_SOURCES src/nptest.cpp lib/src/OptionParser.cpp ${SOURCES})
 add_executable(nptest ${NPTEST_SOURCES})
 
 target_link_libraries(nptest ${CORE_LIBS})
