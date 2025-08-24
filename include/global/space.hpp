@@ -70,6 +70,9 @@ namespace NP {
 					std::cout << "Starting" << std::endl;
 
 				State_space* s = new State_space(prob.jobs, prob.prec, prob.aborts, prob.processors_initial_state,
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+					prob.problem_extensions,
+#endif
 					{ opts.merge_conservative, opts.merge_use_job_finish_times, opts.merge_depth }, opts.timeout, opts.max_memory_usage, opts.max_depth, opts.early_exit, opts.verbose, log_opts
 #ifdef CONFIG_PARALLEL
 					, opts.parallel_enabled, opts.num_threads
