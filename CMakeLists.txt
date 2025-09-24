@@ -4,6 +4,7 @@ project(NP_schedulabiliy_test_clustered VERSION 1.1.0 LANGUAGES CXX)
 
 include_directories(include)
 include_directories(lib/include)
+include_directories(lib/robin-hood-hashing-3.11.5/src/include)
 
 option(PARALLEL_RUN "Enable parallel run" OFF)
 option(USE_TBB_MALLOC "Use the Intel TBB scalable memory allocator" OFF)

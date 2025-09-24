@@ -11,33 +11,33 @@ using namespace NP;
 
 TEST_CASE("[gang] uniproc vs gang") {
 	Global::State_space<dtime_t>::Workload jobs{
-			Job<dtime_t>{1, Interval<dtime_t>(0, 0), Interval<dtime_t>(1, 2), 10, 10, 0, 0},
-			Job<dtime_t>{2, Interval<dtime_t>(10, 10), Interval<dtime_t>(1, 2), 20, 20, 1, 1},
-			Job<dtime_t>{3, Interval<dtime_t>(20, 20), Interval<dtime_t>(1, 2), 30, 30, 2, 2},
-			Job<dtime_t>{4, Interval<dtime_t>(30, 30), Interval<dtime_t>(1, 2), 40, 40, 3, 3},
-			Job<dtime_t>{5, Interval<dtime_t>(40, 40), Interval<dtime_t>(1, 2), 50, 50, 4, 4},
-			Job<dtime_t>{6, Interval<dtime_t>(50, 50), Interval<dtime_t>(1, 2), 60, 60, 5, 5},
-			Job<dtime_t>{7, Interval<dtime_t>(0, 0), Interval<dtime_t>(7, 8), 30, 30, 6, 6},
-			Job<dtime_t>{8, Interval<dtime_t>(30, 30), Interval<dtime_t>(7, 8), 60, 60, 7, 7},
+			Job<dtime_t>{1, Interval<dtime_t>(0, 0), Interval<dtime_t>(1, 2), 10, 10, 0},
+			Job<dtime_t>{2, Interval<dtime_t>(10, 10), Interval<dtime_t>(1, 2), 20, 20, 1},
+			Job<dtime_t>{3, Interval<dtime_t>(20, 20), Interval<dtime_t>(1, 2), 30, 30, 2},
+			Job<dtime_t>{4, Interval<dtime_t>(30, 30), Interval<dtime_t>(1, 2), 40, 40, 3},
+			Job<dtime_t>{5, Interval<dtime_t>(40, 40), Interval<dtime_t>(1, 2), 50, 50, 4},
+			Job<dtime_t>{6, Interval<dtime_t>(50, 50), Interval<dtime_t>(1, 2), 60, 60, 5},
+			Job<dtime_t>{7, Interval<dtime_t>(0, 0), Interval<dtime_t>(7, 8), 30, 30, 6},
+			Job<dtime_t>{8, Interval<dtime_t>(30, 30), Interval<dtime_t>(7, 8), 60, 60, 7},
 	};
 
 	Global::State_space<dtime_t>::Workload jobs_gang{
 			Job<dtime_t>{1, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 10, 10, 0, 0},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 10, 10, 0},
 			Job<dtime_t>{2, Interval<dtime_t>(10, 10),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 20, 20, 1, 1},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 20, 20, 1},
 			Job<dtime_t>{3, Interval<dtime_t>(20, 20),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 30, 30, 2, 2},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 30, 30, 2},
 			Job<dtime_t>{4, Interval<dtime_t>(30, 30),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 40, 40, 3, 3},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 40, 40, 3},
 			Job<dtime_t>{5, Interval<dtime_t>(40, 40),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 50, 50, 4, 4},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 50, 50, 4},
 			Job<dtime_t>{6, Interval<dtime_t>(50, 50),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 60, 60, 5, 5},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 60, 60, 5},
 			Job<dtime_t>{7, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(7, 8)}}, 30, 30, 6, 6},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(7, 8)}}, 30, 30, 6},
 			Job<dtime_t>{8, Interval<dtime_t>(30, 30),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(7, 8)}}, 60, 60, 7, 7},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(7, 8)}}, 60, 60, 7},
 	};
 
 	// compare the two
@@ -61,58 +61,58 @@ TEST_CASE("[gang] uniproc vs gang") {
 
 TEST_CASE("[gang] global vs gang") {
 	Global::State_space<dtime_t>::Workload jobs{
-			Job<dtime_t>{1, Interval<dtime_t>(0, 0), Interval<dtime_t>(1, 2), 10, 10, 0, 0},
-			Job<dtime_t>{2, Interval<dtime_t>(10, 10), Interval<dtime_t>(1, 2), 20, 20, 1, 1},
-			Job<dtime_t>{3, Interval<dtime_t>(20, 20), Interval<dtime_t>(1, 2), 30, 30, 2, 2},
-			Job<dtime_t>{4, Interval<dtime_t>(30, 30), Interval<dtime_t>(1, 2), 40, 40, 3, 3},
-			Job<dtime_t>{5, Interval<dtime_t>(40, 40), Interval<dtime_t>(1, 2), 50, 50, 4, 4},
-			Job<dtime_t>{6, Interval<dtime_t>(50, 50), Interval<dtime_t>(1, 2), 60, 60, 5, 5},
-			Job<dtime_t>{7, Interval<dtime_t>(0, 0), Interval<dtime_t>(7, 8), 30, 30, 6, 6},
-			Job<dtime_t>{8, Interval<dtime_t>(30, 30), Interval<dtime_t>(7, 8), 60, 60, 7, 7},
-			Job<dtime_t>{9, Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60, 8, 8}
+			Job<dtime_t>{1, Interval<dtime_t>(0, 0), Interval<dtime_t>(1, 2), 10, 10, 0},
+			Job<dtime_t>{2, Interval<dtime_t>(10, 10), Interval<dtime_t>(1, 2), 20, 20, 1},
+			Job<dtime_t>{3, Interval<dtime_t>(20, 20), Interval<dtime_t>(1, 2), 30, 30, 2},
+			Job<dtime_t>{4, Interval<dtime_t>(30, 30), Interval<dtime_t>(1, 2), 40, 40, 3},
+			Job<dtime_t>{5, Interval<dtime_t>(40, 40), Interval<dtime_t>(1, 2), 50, 50, 4},
+			Job<dtime_t>{6, Interval<dtime_t>(50, 50), Interval<dtime_t>(1, 2), 60, 60, 5},
+			Job<dtime_t>{7, Interval<dtime_t>(0, 0), Interval<dtime_t>(7, 8), 30, 30, 6},
+			Job<dtime_t>{8, Interval<dtime_t>(30, 30), Interval<dtime_t>(7, 8), 60, 60, 7},
+			Job<dtime_t>{9, Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60, 8}
 	};
 
 	Global::State_space<dtime_t>::Workload jobs_rigid_gang{
 			Job<dtime_t>{1, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 10, 10, 0, 0},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 10, 10, 0},
 			Job<dtime_t>{2, Interval<dtime_t>(10, 10),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 20, 20, 1, 1},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 20, 20, 1},
 			Job<dtime_t>{3, Interval<dtime_t>(20, 20),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 30, 30, 2, 2},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 30, 30, 2},
 			Job<dtime_t>{4, Interval<dtime_t>(30, 30),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 40, 40, 3, 3},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 40, 40, 3},
 			Job<dtime_t>{5, Interval<dtime_t>(40, 40),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 50, 50, 4, 4},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 50, 50, 4},
 			Job<dtime_t>{6, Interval<dtime_t>(50, 50),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 60, 60, 5, 5},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 2)}}, 60, 60, 5},
 			Job<dtime_t>{7, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(7, 8)}}, 30, 30, 6, 6},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(7, 8)}}, 30, 30, 6},
 			Job<dtime_t>{8, Interval<dtime_t>(30, 30),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(7, 8)}}, 60, 60, 7, 7},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(7, 8)}}, 60, 60, 7},
 			Job<dtime_t>{9, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(3, 13)}}, 60, 60, 8, 8}
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(3, 13)}}, 60, 60, 8}
 
 	};
 
 	Global::State_space<dtime_t>::Workload jobs_moldable_gang{
 			Job<dtime_t>{1, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 10, 10, 0, 0},
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 10, 10, 0},
 			Job<dtime_t>{2, Interval<dtime_t>(10, 10),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 20, 20, 1, 1},
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 20, 20, 1},
 			Job<dtime_t>{3, Interval<dtime_t>(20, 20),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 30, 30, 2, 2},
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 30, 30, 2},
 			Job<dtime_t>{4, Interval<dtime_t>(30, 30),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 40, 40, 3, 3},
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 40, 40, 3},
 			Job<dtime_t>{5, Interval<dtime_t>(40, 40),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 50, 50, 4, 4},
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 50, 50, 4},
 			Job<dtime_t>{6, Interval<dtime_t>(50, 50),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 60, 60, 5, 5},
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(0, 5)},{2, Interval<dtime_t>(1, 2)}}, 60, 60, 5},
 			Job<dtime_t>{7, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(5, 12)},{2, Interval<dtime_t>(7, 8)}}, 30, 30, 6, 6},
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(5, 12)},{2, Interval<dtime_t>(7, 8)}}, 30, 30, 6},
 			Job<dtime_t>{8, Interval<dtime_t>(30, 30),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(2, 12)},{2, Interval<dtime_t>(7, 8)}}, 60, 60, 7, 7},
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(2, 12)},{2, Interval<dtime_t>(7, 8)}}, 60, 60, 7},
 			Job<dtime_t>{9, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(3, 25)},{2, Interval<dtime_t>(3, 13)}}, 60, 60, 8, 8}
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(3, 25)},{2, Interval<dtime_t>(3, 13)}}, 60, 60, 8}
 
 	};
 
@@ -153,23 +153,23 @@ TEST_CASE("[gang] global vs gang") {
 TEST_CASE("[gang] rigid gang") {
 	Global::State_space<dtime_t>::Workload jobs_gang{
 			Job<dtime_t>{1, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 10, 10, 0, 0},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 10, 10, 0},
 			Job<dtime_t>{2, Interval<dtime_t>(10, 10),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 20, 20, 1, 1},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 20, 20, 1},
 			Job<dtime_t>{3, Interval<dtime_t>(20, 20),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 30, 30, 2, 2},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 30, 30, 2},
 			Job<dtime_t>{4, Interval<dtime_t>(30, 30),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 40, 40, 3, 3},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 40, 40, 3},
 			Job<dtime_t>{5, Interval<dtime_t>(40, 40),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 50, 50, 4, 4},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 50, 50, 4},
 			Job<dtime_t>{6, Interval<dtime_t>(50, 50),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 60, 60, 5, 5},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 60, 60, 5},
 			Job<dtime_t>{7, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{3, Interval<dtime_t>(6, 7)}}, 30, 30, 6, 6},
+						 std::map<unsigned int, Interval<dtime_t>>{{3, Interval<dtime_t>(6, 7)}}, 30, 30, 6},
 			Job<dtime_t>{8, Interval<dtime_t>(30, 30),
-						 std::map<unsigned int, Interval<dtime_t>>{{3, Interval<dtime_t>(6, 7)}}, 60, 60, 7, 7},
+						 std::map<unsigned int, Interval<dtime_t>>{{3, Interval<dtime_t>(6, 7)}}, 60, 60, 7},
 			Job<dtime_t>{9, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(3, 13)}}, 60, 60, 8, 8}
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(3, 13)}}, 60, 60, 8}
 
 	};
 
@@ -190,23 +190,23 @@ TEST_CASE("[gang] rigid gang") {
 TEST_CASE("[gang] moldable gang") {
 	Global::State_space<dtime_t>::Workload jobs_gang{
 			Job<dtime_t>{1, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 10, 10, 0, 0},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 10, 10, 0},
 			Job<dtime_t>{2, Interval<dtime_t>(10, 10),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 20, 20, 1, 1},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 20, 20, 1},
 			Job<dtime_t>{3, Interval<dtime_t>(20, 20),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 30, 30, 2, 2},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 30, 30, 2},
 			Job<dtime_t>{4, Interval<dtime_t>(30, 30),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 40, 40, 3, 3},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 40, 40, 3},
 			Job<dtime_t>{5, Interval<dtime_t>(40, 40),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 50, 50, 4, 4},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 50, 50, 4},
 			Job<dtime_t>{6, Interval<dtime_t>(50, 50),
-						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 60, 60, 5, 5},
+						 std::map<unsigned int, Interval<dtime_t>>{{2, Interval<dtime_t>(1, 4)}}, 60, 60, 5},
 			Job<dtime_t>{7, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(15, 17)},{3, Interval<dtime_t>(6, 7)}}, 30, 30, 6, 6},
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(15, 17)},{3, Interval<dtime_t>(6, 7)}}, 30, 30, 6},
 			Job<dtime_t>{8, Interval<dtime_t>(25, 30),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(15, 17)},{3, Interval<dtime_t>(6, 7)}}, 60, 60, 7, 7},
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(15, 17)},{3, Interval<dtime_t>(6, 7)}}, 60, 60, 7},
 			Job<dtime_t>{9, Interval<dtime_t>(0, 0),
-						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(5, 20)},{2, Interval<dtime_t>(3, 13)}}, 60, 60, 8, 8}
+						 std::map<unsigned int, Interval<dtime_t>>{{1, Interval<dtime_t>(5, 20)},{2, Interval<dtime_t>(3, 13)}}, 60, 60, 8}
 
 	};
 

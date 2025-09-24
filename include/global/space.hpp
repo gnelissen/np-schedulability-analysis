@@ -23,6 +23,8 @@
 #include <tbb/task_arena.h>
 #endif
 
+#include "robin_hood.h"
+
 #include "config.h"
 #include "problem.hpp"
 #include "global/state_space_data.hpp"
@@ -32,7 +34,7 @@
 #include "global/node.hpp"
 #include "global/state.hpp"
 #include "global/cluster.hpp"
-#include "object_pool.hpp"
+#include "global/state_pools.hpp"
 
 #include "logger.hpp"
 
@@ -125,6 +127,17 @@ namespace NP {
 			// convenience interface for tests
 			static State_space* explore_naively(
 				const Workload& jobs,
+				const std::vector<std::vector<Interval<Time>>>& core_availabilities)
+			{
+				Problem p{ jobs, core_availabilities };
+				Analysis_options o;
+				o.be_naive = true;
+				return explore(p, o);
+			}
+
+			// convenience interface for tests
+			static State_space* explore_naively(
+				const Workload& jobs,
 				const unsigned int num_cpus)
 			{
 				Problem p{ jobs, {num_cpus} };
@@ -139,6 +152,16 @@ namespace NP {
 				const std::vector<unsigned int>& num_cpus = { 1 })
 			{
 				Problem p{ jobs, num_cpus };
+				Analysis_options o;
+				return explore(p, o);
+			}
+
+			// convenience interface for tests
+			static State_space* explore(
+				const Workload& jobs,
+				const std::vector<std::vector<Interval<Time>>>& core_availabilities)
+			{
+				Problem p{ jobs, core_availabilities };
 				Analysis_options o;
 				return explore(p, o);
 			}
@@ -247,7 +270,7 @@ namespace NP {
 #ifdef CONFIG_PARALLEL
 			typedef tbb::concurrent_unordered_map<hash_value_t, Node_refs> Nodes_map;
 #else
-			typedef std::unordered_map<hash_value_t, Node_refs> Nodes_map;
+			typedef robin_hood::unordered_flat_map<hash_value_t, Node_refs> Nodes_map;
 #endif
 			typedef const Job<Time>* Job_ref;
 			struct Time_bounds {
@@ -294,8 +317,6 @@ namespace NP {
 			const Merge_options merge_opts;
 			Nodes_storage nodes_storage;
 			Nodes_map nodes_by_key;
-			Object_pool<Node> node_pool;
-			Object_pool<State> state_pool;
 
 #ifdef CONFIG_PARALLEL
 			// Thread-safe statistics and control
@@ -399,6 +420,9 @@ namespace NP {
 					rta_mutexes[i] = std::make_unique<std::mutex>();
 				}
 #endif
+				clear_node_pool<Time>();
+				clear_state_pool<Time>();
+				clear_cluster_pool<Time>();
 			}
 
 		private:
@@ -531,7 +555,7 @@ namespace NP {
 			template <typename... Args>
 			Node_ref alloc_node(const int depth, Args&&... args)
 			{
-				Node_ref n = node_pool.acquire(std::forward<Args>(args)...);
+				Node_ref n = acquire_node<Time>(std::forward<Args>(args)...);
 #ifdef CONFIG_PARALLEL
 				if (parallel_enabled) {
 					nodes_storage[(current_job_count + depth) % nodes_storage.size()].push(n);
@@ -547,7 +571,7 @@ namespace NP {
 			template <typename... Args>
 			State_ref new_state(Args&&... args)
 			{
-				return state_pool.acquire(std::forward<Args>(args)...);
+				return acquire_state<Time>(std::forward<Args>(args)...);
 			}
 
 			template <typename... Args>
@@ -560,7 +584,7 @@ namespace NP {
 					deadline_miss_state = new_s;
 #endif
 				// try to merge the new state with existing states in node n.
-				if (!(n.get_states()->empty())) {
+				if (!(n.get_states().empty())) {
 					int n_states_merged = n.merge_states(*new_s, merge_opts.conservative, merge_opts.use_finish_times, merge_opts.budget);
 					if (n_states_merged > 0) {
 						release_state(new_s); // if we could merge no need to keep track of the new state anymore
@@ -578,16 +602,6 @@ namespace NP {
 					increment_states_safe();
 
 				}
-			}
-
-			void release_state(const std::shared_ptr<State> s)
-			{
-				state_pool.release(s);
-			}
-
-			void release_node(const std::shared_ptr<Node> n)
-			{
-				node_pool.release(n);
 			}
 
 			void cache_node(Node_ref n)
@@ -770,7 +784,7 @@ namespace NP {
 				}
 			}
 
-			bool dispatch(const Node& n, const Job_with_time_bounds& disp_j, const unsigned int affinity)
+			bool dispatch(const Node_ref& n, Job_ref j, const Time t_high_wos, const unsigned int affinity)
 			{
 				// All states in node 'n' for which the job 'j' is eligible will 
 				// be added to that same node. 
@@ -778,12 +792,9 @@ namespace NP {
 				Node_ref next = nullptr;
 				bool dispatched_one = false;
 
-				const Job_ref j = disp_j.first;
-				Time t_high_wos = disp_j.second.t_high_upbnd;
-
 				// loop over all states in the node n
-				const auto* n_states = n.get_states();
-				for (const State_ref& s : *n_states)
+				const auto& n_states = n->get_states();
+				for (const State_ref& s : n_states)
 				{
 					const auto& cs = s->cluster(affinity);
 					
@@ -793,10 +804,10 @@ namespace NP {
 					{
 						unsigned int p = it->first;
 						// Calculate t_wc and t_high
-						Time t_wc = std::max(cs.core_availability().max(), next_certain_job_ready_time(n, *s, affinity));
+						Time t_wc = std::max(cs.core_availability().max(), next_certain_job_ready_time(*n, *s, affinity));
 
-						Time t_high_succ = state_space_data.next_certain_higher_priority_successor_job_ready_time(n, *s, *j, p);
-						Time t_high_gang = state_space_data.next_certain_higher_priority_gang_source_job_ready_time(n, *s, *j, p, t_wc + 1);
+						Time t_high_succ = state_space_data.next_certain_higher_priority_successor_job_ready_time(*n, *s, *j, p);
+						Time t_high_gang = state_space_data.next_certain_higher_priority_gang_source_job_ready_time(*n, *s, *j, p, t_wc + 1);
 						Time t_high = std::min(t_high_wos, std::min(t_high_gang, t_high_succ));
 
 						// If j can execute on ncores+k cores, then 
@@ -828,17 +839,17 @@ namespace NP {
 
 						// If be_naive, a new node and a new state should be created for each new job dispatch.
 						if (be_naive)
-							next = new_node(1, n, *j, j->get_job_index(), state_space_data, disp_j.second.earliest_next_release, disp_j.second.latest_next_source_job_release, disp_j.second.latest_next_seq_source_job_release);
+							next = new_node(1, *n, *j, j->get_job_index(), state_space_data, state_space_data.earliest_possible_job_release(*n, *j), state_space_data.earliest_certain_source_job_release(*n, *j), state_space_data.earliest_certain_sequential_source_job_release(*n, *j));
 
 						// if we do not have a pointer to a node with the same set of scheduled job yet,
 						// try to find an existing node with the same set of scheduled jobs. Otherwise, create one.
 						if (next == nullptr)
 						{
-							const auto pair_it = nodes_by_key.find(n.next_key(*j));
+							const auto pair_it = nodes_by_key.find(n->next_key(*j));
 							if (pair_it != nodes_by_key.end()) {
-								Job_set new_sched_jobs{ n.get_scheduled_jobs(), j->get_job_index() };
+								//Job_set next_scheduled_jobs{ n->get_scheduled_jobs(), j->get_job_index() };
 								for (Node_ref other : pair_it->second) {
-									if (other->get_scheduled_jobs() == new_sched_jobs)
+									if (other->get_scheduled_jobs().matches(n->get_scheduled_jobs(), j->get_job_index()))
 									{
 										next = other;
 										DM("=== dispatch: next exists." << std::endl);
@@ -848,7 +859,7 @@ namespace NP {
 							}
 							// If there is no node yet, create one.
 							if (next == nullptr)
-								next = new_node(1, n, *j, j->get_job_index(), state_space_data, disp_j.second.earliest_next_release, disp_j.second.latest_next_source_job_release, disp_j.second.latest_next_seq_source_job_release);
+								next = new_node(1, *n, *j, j->get_job_index(), state_space_data, state_space_data.earliest_possible_job_release(*n, *j), state_space_data.earliest_certain_source_job_release(*n, *j), state_space_data.earliest_certain_sequential_source_job_release(*n, *j));
 						}
 
 						// next should always exist at this point, possibly without states in it
@@ -858,13 +869,13 @@ namespace NP {
 
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 						if(log)
-							logger.log_job_dispatched(n, j, stimes, ftimes, p, next, current_job_count);
+							logger.log_job_dispatched(n, *j, stimes, ftimes, p, next, current_job_count);
 #endif
 
 						// make sure we didn't skip any jobs which would then certainly miss its deadline
 						// only do that if we stop the analysis when a deadline miss is found 
 						if (be_naive && early_exit) {
-							check_for_deadline_misses(n, *next);
+							check_for_deadline_misses(*n, *next);
 						}
 
 						count_edge();
@@ -882,7 +893,7 @@ namespace NP {
 				// its deadline because of when the processors become free next.
 				// if we are not using the naive exploration, we check for deadline misses only once per job dispatched
 				if (early_exit && !be_naive && next != nullptr)
-					check_for_deadline_misses(n, *next);
+					check_for_deadline_misses(*n, *next);
 
 				return dispatched_one;
 			}
@@ -913,77 +924,163 @@ namespace NP {
 					upbnd_t_wc_any = std::min(upbnd_t_wc_any, upbnd_t_wc_per_cluster[i]);
 				}
 
-				std::vector<std::deque<Job_with_time_bounds>> eligible_jobs_per_cluster(num_clusters);
-				
+				//std::deque<std::pair<Job_ref,Time>> eligible_jobs;
+				typename State_space_data<Time>::By_time_map::const_iterator first_eligible;
 				int independent_cluster = -1;
 				for (int cluster_id = 0; cluster_id < num_clusters; cluster_id++) {
 					bool is_independent = true;
-					bool found_one_on_c = false;
+					//check all jobs that may be dependent on other clusters and be the next job dispatched on cluster_id
+					for (Job_ref j : n->get_locally_ready_successor_jobs(cluster_id))
+					{
+						if (n->job_dependent_on_other_cluster(*j, state_space_data.predecessors_suspensions[j->get_job_index()], state_space_data.jobs, upbnd_t_wc_per_cluster[cluster_id])) {
+							is_independent = false;
+							break;
+						}
+					}
+
+					if (!is_independent)
+						continue;
+
+					// check whether there is at least one job to dispatch in this cluster
+					// if yes, no need to look further
+					if(n->get_ready_successor_jobs(cluster_id).size() > 0 )
+					{ 
+						independent_cluster = cluster_id;
+						first_eligible = state_space_data.jobs_by_earliest_arrival_by_cluster[cluster_id].lower_bound(t_min[cluster_id]);
+						break;
+					}
+
+					// check whether there is at least one job to dispatch in this cluster
+					bool found_one = false;
+					//eligible_jobs.clear();
 					//check all jobs that may be eligible to be dispatched next
+					// part 1: check source jobs (i.e., jobs without prcedence constraints) that are potentially eligible
 					for (auto it = state_space_data.jobs_by_earliest_arrival_by_cluster[cluster_id].lower_bound(t_min[cluster_id]);
 						it != state_space_data.jobs_by_earliest_arrival_by_cluster[cluster_id].end();
 						it++)
 					{
-						const Job<Time>& j = *it->second;
-						DM(j << " (" << index_of(j) << ")" << std::endl);
+						Job_ref j = it->second;
 						// stop looking once we've left the window of interest
-						if (j.earliest_arrival() > upbnd_t_wc_per_cluster[cluster_id])
+						if (j->earliest_arrival() > upbnd_t_wc_per_cluster[cluster_id])
 							break;
 
-						// Job could be not ready due to precedence constraints
-						if (ready(*n, j)) {
-							// Since this job is released in the future, it better
-							// be incomplete...
-							assert(unfinished(*n, j));
+						if (!unfinished(*n, *j))
+							continue;
 
-							Time t_high_wos = state_space_data.next_certain_higher_priority_seq_source_job_release(*n, j, upbnd_t_wc_per_cluster[cluster_id] + 1);
-							// if there is a higher priority job that is certainly ready before job j is released at the earliest, 
-							// then j will never be the next job dispached by the scheduler
-							if (t_high_wos <= j.earliest_arrival())
-								continue;
-
+						Time t_high_wos = state_space_data.next_certain_higher_priority_seq_source_job_release(*n, *j, upbnd_t_wc_per_cluster[cluster_id] + 1);
+						// if there is a higher priority job that is certainly ready before job j is released at the earliest, 
+						// then j will never be the next job dispached by the scheduler
+						if (t_high_wos <= j->earliest_arrival())
+							continue;
 #ifdef CONFIG_PRUNING
-							// if pruning is active, check whether the job is eligible for dispatching
-							if (pruning_active && secateur.prune_branch(j, *n)) {
-								pruned = true;
-								continue;
-							}
+						// if pruning is active, check whether the job is eligible for dispatching
+						if (pruning_active && secateur.prune_branch(*j, *n)) {
+							pruned = true;
+							continue;
+						}
 #endif
-
-							// calculate lower and upper bounds on the next job releases if j gets dispatched
-							Time earliest_next_job_rel = state_space_data.earliest_possible_job_release(*n, j);
-							Time latest_next_source_job_rel = state_space_data.earliest_certain_source_job_release(*n, j);
-							Time latest_next_seq_source_job_rel = state_space_data.earliest_certain_sequential_source_job_release(*n, j);
-
-							// add j to the list of eligible jobs together with relevant timing information
-							eligible_jobs_per_cluster[cluster_id].emplace_back(&j, Time_bounds{ t_high_wos, earliest_next_job_rel, latest_next_source_job_rel, latest_next_seq_source_job_rel });
-							found_one = true;
-							found_one_on_c = true;
-						}
-						else if (is_independent && n->job_dependent_on_other_cluster(j, state_space_data.predecessors_suspensions[j.get_job_index()], state_space_data.jobs, upbnd_t_wc_per_cluster[cluster_id])) {
-							is_independent = false;
-						}
+						found_one = true;
+						first_eligible = it;
+						break;
 					}
-					if (found_one_on_c && is_independent) {
+					// part 2: check ready successor jobs (i.e., jobs with precedence constraints that are completed) that are potentially eligible
+					/*for (auto it = n->get_ready_successor_jobs(cluster_id).begin();
+						it != n->get_ready_successor_jobs(cluster_id).end();
+						it++)
+					{
+						Job_ref j = *it;
+						// stop looking once we've left the window of interest
+						if (j->earliest_arrival() > upbnd_t_wc_per_cluster[cluster_id])
+							continue;
+
+						// Since this job is is recorded as ready in the state, it better
+						// be incomplete...
+						assert(unfinished(*n, *j));
+
+						Time t_high_wos = state_space_data.next_certain_higher_priority_seq_source_job_release(*n, *j, upbnd_t_wc_per_cluster[cluster_id] + 1);
+						// if there is a higher priority job that is certainly ready before job j is released at the earliest, 
+						// then j will never be the next job dispached by the scheduler
+						if (t_high_wos <= j->earliest_arrival())
+							continue;
+#ifdef CONFIG_PRUNING
+						// if pruning is active, check whether the job is eligible for dispatching
+						if (pruning_active && secateur.prune_branch(*j, *n)) {
+							pruned = true;
+							continue;
+						}
+#endif
+						eligible_jobs.emplace_back(j, t_high_wos);
+					}
+					// if we found no jobs to dispatch, look for another independent cluster
+					if (eligible_jobs.empty())
+						continue;*/
+					// if we found one independent cluster with at least one job 
+					// to dispatch, we can stop looking for others
+					if (found_one) {
 						independent_cluster = cluster_id;
 						break;
 					}
 				}
-				// check for a dead end
-				if (!found_one && !pruned && !all_jobs_scheduled(*n)) {
-					// out of options and we didn't schedule all jobs
-					observed_deadline_miss = true;
-					deadline_miss_node = n;
-					deadline_miss_state = n->get_first_state();
-					aborted = true;
-					return;
-				}
 
 				bool dispatched_one = false;
-				// if some cluster is independent, dispatch jobs on that clusters
+				// if some cluster is independent, dispatch jobs on that cluster
 				if (independent_cluster != -1) {
-					for (const auto& j : eligible_jobs_per_cluster[independent_cluster]) {
-						dispatched_one |= dispatch(*n, j, independent_cluster);
+					assert(independent_cluster < num_clusters);
+
+					// part 1: check source jobs (i.e., jobs without prcedence constraints) that are potentially eligible
+					for (auto it = first_eligible;
+						it != state_space_data.jobs_by_earliest_arrival_by_cluster[independent_cluster].end();
+						it++)
+					{
+						Job_ref j = it->second;
+						// stop looking once we've left the window of interest
+						if (j->earliest_arrival() > upbnd_t_wc_per_cluster[independent_cluster])
+							break;
+
+						if (!unfinished(*n, *j))
+							continue;
+
+						Time t_high_wos = state_space_data.next_certain_higher_priority_seq_source_job_release(*n, *j, upbnd_t_wc_per_cluster[independent_cluster] + 1);
+						// if there is a higher priority job that is certainly ready before job j is released at the earliest, 
+						// then j will never be the next job dispached by the scheduler
+						if (t_high_wos <= j->earliest_arrival())
+							continue;
+#ifdef CONFIG_PRUNING
+						// if pruning is active, check whether the job is eligible for dispatching
+						if (pruning_active && secateur.prune_branch(*j, *n)) {
+							pruned = true;
+							continue;
+						}
+#endif
+						dispatched_one |= dispatch(n, j, t_high_wos, independent_cluster);
+					}
+					// part 2: check ready successor jobs (i.e., jobs with precedence constraints that are completed) that are potentially eligible
+					for (auto it = n->get_ready_successor_jobs(independent_cluster).begin();
+						it != n->get_ready_successor_jobs(independent_cluster).end();
+						it++)
+					{
+						Job_ref j = *it;
+						// stop looking once we've left the window of interest
+						if (j->earliest_arrival() > upbnd_t_wc_per_cluster[independent_cluster])
+							continue;
+
+						// Since this job is is recorded as ready in the state, it better
+						// be incomplete...
+						assert(unfinished(*n, *j));
+
+						Time t_high_wos = state_space_data.next_certain_higher_priority_seq_source_job_release(*n, *j, upbnd_t_wc_per_cluster[independent_cluster] + 1);
+						// if there is a higher priority job that is certainly ready before job j is released at the earliest, 
+						// then j will never be the next job dispached by the scheduler
+						if (t_high_wos <= j->earliest_arrival())
+							continue;
+#ifdef CONFIG_PRUNING
+						// if pruning is active, check whether the job is eligible for dispatching
+						if (pruning_active && secateur.prune_branch(*j, *n)) {
+							pruned = true;
+							continue;
+						}
+#endif
+						dispatched_one |= dispatch(n, j, t_high_wos, independent_cluster);
 					}
 				}
 				else
@@ -995,10 +1092,61 @@ namespace NP {
 						if (t_min[cluster_id] > upbnd_t_wc_any)
 							continue;
 
-						for (const auto& j : eligible_jobs_per_cluster[cluster_id]) {
-							// if a job may start before any other job, we dispatch it
-							if (j.first->earliest_arrival() <= upbnd_t_wc_any)
-								dispatched_one |= dispatch(*n, j, cluster_id);
+						//check all jobs that may be eligible to be dispatched next
+						// part 1: check source jobs (i.e., jobs without prcedence constraints) that are potentially eligible
+						for (auto it = state_space_data.jobs_by_earliest_arrival_by_cluster[cluster_id].lower_bound(t_min[cluster_id]);
+							it != state_space_data.jobs_by_earliest_arrival_by_cluster[cluster_id].end();
+							it++)
+						{
+							Job_ref j = it->second;
+							// stop looking once we've left the window of interest
+							if (j->earliest_arrival() > upbnd_t_wc_any)
+								break;
+
+							if (!unfinished(*n, *j))
+								continue;
+
+							Time t_high_wos = state_space_data.next_certain_higher_priority_seq_source_job_release(*n, *j, upbnd_t_wc_any + 1);
+							// if there is a higher priority job that is certainly ready before job j is released at the earliest, 
+							// then j will never be the next job dispached by the scheduler
+							if (t_high_wos <= j->earliest_arrival())
+								continue;
+#ifdef CONFIG_PRUNING
+							// if pruning is active, check whether the job is eligible for dispatching
+							if (pruning_active && secateur.prune_branch(j, *n)) {
+								pruned = true;
+								continue;
+							}
+#endif
+							dispatched_one |= dispatch(n, j, t_high_wos, cluster_id);
+						}
+						// part 2: check ready successor jobs (i.e., jobs with precedence constraints that are completed) that are potentially eligible
+						for (auto it = n->get_ready_successor_jobs(cluster_id).begin();
+							it != n->get_ready_successor_jobs(cluster_id).end();
+							it++)
+						{
+							Job_ref j = *it;
+							// stop looking once we've left the window of interest
+							if (j->earliest_arrival() > upbnd_t_wc_any)
+								continue;
+
+							// Since this job is is recorded as ready in the state, it better
+							// be incomplete...
+							assert(unfinished(*n, *j));
+
+							Time t_high_wos = state_space_data.next_certain_higher_priority_seq_source_job_release(*n, *j, upbnd_t_wc_any + 1);
+							// if there is a higher priority job that is certainly ready before job j is released at the earliest, 
+							// then j will never be the next job dispached by the scheduler
+							if (t_high_wos <= j->earliest_arrival())
+								continue;
+#ifdef CONFIG_PRUNING
+							// if pruning is active, check whether the job is eligible for dispatching
+							if (pruning_active && secateur.prune_branch(*j, *n)) {
+								pruned = true;
+								continue;
+							}
+#endif
+							dispatched_one |= dispatch(n, j, t_high_wos, cluster_id);
 						}
 					}
 				}
@@ -1034,6 +1182,9 @@ namespace NP {
 				make_initial_node();
 
 				while (current_job_count < state_space_data.num_jobs()) {
+					// clean up the state cache
+					nodes_by_key.clear();
+					// get the current exploration front
 					Nodes& exploration_front = nodes();
 #ifdef CONFIG_PARALLEL
 					unsigned long n = exploration_front.unsafe_size();
@@ -1084,15 +1235,8 @@ namespace NP {
 										explore(node);
 										
 										if (aborted) break;
-
-										// Clean up nodes that are no longer referenced
-										if (node.unique()) {
-											auto states = node->get_states();
-											for (auto s = states->begin(); s != states->end(); s++) {
-												release_state(*s);
-											}
-											release_node(node);
-										}
+										// Clean up nodes that are no longer needed
+										release_node(node);
 									}
 								});
 						});
@@ -1104,14 +1248,7 @@ namespace NP {
 							check_cpu_timeout();
 							if (aborted)
 								break;
-
-							if (node.unique()) {
-								auto states = node->get_states();
-								for (auto s = states->begin(); s != states->end(); s++) {
-									release_state(*s);
-								}
-								release_node(node);
-							}
+							release_node(node);
 						}
 					}
 #else
@@ -1121,22 +1258,10 @@ namespace NP {
 						check_cpu_timeout();
 						if (aborted)
 							break;
-
-						// If the node is not refered to anymore, we can reuse the node and state objects for other states.
-						if (node.unique()) {
-							auto states = node->get_states();
-							for (auto s = states->begin(); s != states->end(); s++) {
-								release_state(*s);
-							}
-							release_node(node);
-						}
+						// Clean up nodes that are no longer needed
+						release_node(node);
 					}
 #endif
-
-					// clean up the state cache if necessary
-					if (!be_naive)
-						nodes_by_key.clear();
-
 					nodes().clear();
 					current_job_count++;
 				}

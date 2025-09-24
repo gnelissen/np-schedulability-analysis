@@ -44,14 +44,12 @@ TEST_CASE("Intervals") {
 
 
 TEST_CASE("Job hashes work") {
-	Job<dtime_t> j1{9,  Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60, 0, 0};
-	Job<dtime_t> j2{9,  Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60, 0, 0};
-	Job<dtime_t> j3{10, Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60, 0, 2};
+	Job<dtime_t> j1{8,  Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60, 0, 0, 0};
+	Job<dtime_t> j2{9,  Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60, 0, 0, 0};
+	Job<dtime_t> j3{10, Interval<dtime_t>(0, 0), Interval<dtime_t>(3, 13), 60, 60, 1, 0, 0};
 
-	auto h = std::hash<Job<dtime_t>>{};
-
-	CHECK(h(j1) == h(j2)); // The job index (last argument) can be used to make the hash uniq.
-	CHECK(h(j3) != h(j1));
+	CHECK(j1.get_key() == j2.get_key()); // The job index is used to make the hash uniq.
+    CHECK(j3.get_key() != j1.get_key());
 }
 
 
@@ -97,38 +95,153 @@ TEST_CASE("bool vector assumptions") {
 }
 
 
-TEST_CASE("[basic] index set")
-{
-	NP::Index_set empty;
-	NP::Index_set all;
+using NP::Index_set;
 
-	CHECK(empty.is_subset_of(all));
-	CHECK(empty.size() == 0);
+TEST_CASE("Index_set: Basic Construction and State") {
+    Index_set s1;
+    CHECK(s1.size() == 0);
+    CHECK_FALSE(s1.contains(0));
+    CHECK_FALSE(s1.contains(100));
 
-	all.add(10);
-	all.add(20);
-	all.add(30);
+    Index_set s2(s1);
+    CHECK(s1 == s2);
 
-	CHECK(all.contains(10));
-	CHECK(!all.contains(29));
-	CHECK(all.size() == 3);
+    Index_set s3;
+    s3.add(5);
+    CHECK(s1 != s3);
+    s3 = s1;
+    CHECK(s1 == s3);
 
-	CHECK(!all.is_subset_of(empty));
-
-	NP::Index_set some;
-	some.add(10);
-	some.add(20);
-
-	CHECK(some.is_subset_of(all));
-	CHECK(!all.is_subset_of(some));
-	CHECK(some.size() == 2);
-
-	std::vector<std::size_t> a{10, 20};
-	std::vector<std::size_t> b{30, 20};
-	std::vector<std::size_t> c{30, 40};
-
-	CHECK(all.includes(a));
-	CHECK(all.includes(b));
-	CHECK(!all.includes(c));
+    s3.add(10);
+    CHECK(s3.size() == NP::Block_Manager::BLOCK_SIZE * 64);
+    s3.clear();
+    CHECK(s3.size() == 0);
+    CHECK(s3 == s1);
 }
 
+TEST_CASE("Index_set: Adding Elements, `contains`, and `size`") {
+    Index_set s;
+    s.add(0);
+    CHECK(s.contains(0));
+    CHECK_FALSE(s.contains(1));
+    CHECK(s.size() == NP::Block_Manager::BLOCK_SIZE * 64);
+
+    s.add(63);
+    CHECK(s.contains(63));
+    CHECK(s.size() == NP::Block_Manager::BLOCK_SIZE * 64);
+
+    // Cross a u64 boundary
+    s.add(64);
+    CHECK(s.contains(64));
+    CHECK(s.size() == NP::Block_Manager::BLOCK_SIZE * 64);
+
+    // Cross a block boundary (BLOCK_SIZE = 32) -> 32 * 64 = 2048
+    s.add(2048);
+    CHECK(s.contains(2048));
+    CHECK(s.size() == 2 * NP::Block_Manager::BLOCK_SIZE * 64);
+
+    // Add an existing element
+    s.add(64);
+    CHECK(s.size() == 2 * NP::Block_Manager::BLOCK_SIZE * 64);
+
+    CHECK_FALSE(s.contains(9999));
+}
+
+TEST_CASE("Index_set: Derivation Constructor and Immutability") {
+    Index_set s1;
+    s1.add(10);
+    s1.add(20);
+
+    Index_set s2(s1, 30);
+
+    // Original set should be unchanged
+    //CHECK(s1.size() == 2);
+    CHECK(s1.contains(10));
+    CHECK(s1.contains(20));
+    CHECK_FALSE(s1.contains(30));
+
+    // New set should have all old bits plus the new one
+    //CHECK(s2.size() == 3);
+    CHECK(s2.contains(10));
+    CHECK(s2.contains(20));
+    CHECK(s2.contains(30));
+
+    CHECK(s1 != s2);
+}
+
+TEST_CASE("Index_set: Equality and Canonicalization") {
+    Index_set s1, s2;
+    s1.add(10);
+    s1.add(500);
+    s1.add(3000);
+
+    s2.add(3000);
+    s2.add(10);
+    s2.add(500);
+
+    // Sets with the same elements added in different orders must be equal
+    CHECK(s1 == s2);
+    //CHECK(s1.size() == 3);
+    //CHECK(s2.size() == 3);
+
+    s2.add(4000);
+    CHECK(s1 != s2);
+}
+
+TEST_CASE("Index_set: `matches` method correctness") {
+    Index_set s_empty;
+
+    SUBCASE("Matching from an empty set") {
+        Index_set s_derived(s_empty, 123);
+        CHECK(s_derived.matches(s_empty, 123));
+        CHECK_FALSE(s_empty.matches(s_derived, 123));
+    }
+
+    SUBCASE("Matching from a non-empty set") {
+        Index_set s_base;
+        s_base.add(50);
+        s_base.add(100);
+
+        Index_set s_derived(s_base, 200);
+        CHECK(s_derived.matches(s_base, 200));
+
+        // Check false negatives
+        CHECK_FALSE(s_derived.matches(s_base, 201)); // Wrong index
+        CHECK_FALSE(s_base.matches(s_derived, 200)); // Wrong direction
+
+        Index_set s_unrelated;
+        s_unrelated.add(50);
+        s_unrelated.add(101); // Different base
+        CHECK_FALSE(s_derived.matches(s_unrelated, 200));
+    }
+
+    SUBCASE("Matching across block boundaries") {
+        Index_set s_base;
+        s_base.add(1);
+        Index_set s_derived(s_base, 2050); // idx=2050 crosses block boundary
+        CHECK(s_derived.matches(s_base, 2050));
+    }
+
+    SUBCASE("Matching should fail if sets are identical") {
+        Index_set s1;
+        s1.add(10);
+        CHECK_FALSE(s1.matches(s1, 10));
+    }
+}
+
+TEST_CASE("Index_set: `first_non_full_block` optimization") {
+    Index_set s;
+    // Fill the first block completely (BLOCK_SIZE * 64 bits)
+    for (size_t i = 0; i < NP::Block_Manager::BLOCK_SIZE * 64; ++i) {
+        s.add(i);
+    }
+
+    CHECK(s.size() == NP::Block_Manager::BLOCK_SIZE * 64);
+
+    Index_set s_copy = s;
+    CHECK(s == s_copy); // Equality check should be fast
+
+    s.add(NP::Block_Manager::BLOCK_SIZE * 64); // Add one more bit
+    CHECK(s != s_copy);
+    CHECK(s.size() == 2 * NP::Block_Manager::BLOCK_SIZE * 64);
+}

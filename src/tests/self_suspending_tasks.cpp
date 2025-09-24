@@ -198,14 +198,13 @@ TEST_CASE("[susp] Uniproc Global Schedulability Check (sn_susp)") {
 
 	Scheduling_problem<dtime_t> prob{
 		parse_csv_job_file<dtime_t>(in),
-		parse_precedence_file<dtime_t>(susp_dag_in)};
+		parse_precedence_file<dtime_t>(susp_dag_in),
+		1};
 
 	Analysis_options opts;
 
 	auto uspace = Global::State_space<dtime_t>::explore(prob, opts);
 	CHECK(uspace->is_schedulable());
-
-	prob.num_processors = { 1 };
 	opts.be_naive = false;
 
 	auto gspace = NP::Global::State_space<dtime_t>::explore(prob, opts);
@@ -214,8 +213,6 @@ TEST_CASE("[susp] Uniproc Global Schedulability Check (sn_susp)") {
 	for (const Job<dtime_t>& j : prob.jobs) {
 		CHECK(uspace->get_finish_times(j) == gspace->get_finish_times(j)); 
 	}
-	delete uspace;
-	delete gspace;
 }
 
 TEST_CASE("[susp] Uniproc Global Schedulability Check (g_pw_diff)") {
@@ -224,14 +221,12 @@ TEST_CASE("[susp] Uniproc Global Schedulability Check (g_pw_diff)") {
 
 	Scheduling_problem<dtime_t> prob{
 		parse_csv_job_file<dtime_t>(in),
-		parse_precedence_file<dtime_t>(susp_dag_in)};
+		parse_precedence_file<dtime_t>(susp_dag_in), 1};
 
 	Analysis_options opts;
 
 	auto uspace = Global::State_space<dtime_t>::explore(prob, opts);
 	CHECK(uspace->is_schedulable());
-
-	prob.num_processors = { 1 };
 	opts.be_naive = false;
 
 	auto gspace = NP::Global::State_space<dtime_t>::explore(prob, opts); 
@@ -240,8 +235,6 @@ TEST_CASE("[susp] Uniproc Global Schedulability Check (g_pw_diff)") {
 	for (const Job<dtime_t>& j : prob.jobs) {
 		CHECK(uspace->get_finish_times(j) == gspace->get_finish_times(j)); 
 	}
-	delete uspace;
-	delete gspace;
 }
 
 // test removed: the code does not differentiate between uniproc and global anymore

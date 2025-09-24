@@ -35,9 +35,8 @@ namespace NP {
 			typedef const Job<Time>* Job_ref;
 			typedef std::vector<Job_index> Job_precedence_set;
 			typedef std::vector<std::pair<Job_ref, Interval<Time>>> Suspensions_list;
-
-		private:
 			typedef std::multimap<Time, Job_ref> By_time_map;
+		private:
 
 			// not touched after initialization
 			std::vector<By_time_map> _successor_jobs_by_latest_arrival_by_cluster;
@@ -111,12 +110,13 @@ namespace NP {
 					}
 					else if (j.get_min_parallelism() == 1) {
 						_sequential_source_jobs_by_latest_arrival_by_cluster[j.get_affinity()].insert({ j.latest_arrival(), &j });
+						_jobs_by_earliest_arrival_by_cluster[j.get_affinity()].insert({ j.earliest_arrival(), &j });
 					}
 					else {
 						_gang_source_jobs_by_latest_arrival_by_cluster[j.get_affinity()].insert({ j.latest_arrival(), &j });
+						_jobs_by_earliest_arrival_by_cluster[j.get_affinity()].insert({ j.earliest_arrival(), &j });
 					}					
 					_jobs_by_deadline[j.get_affinity()].insert({ j.get_deadline(), &j });
-					_jobs_by_earliest_arrival_by_cluster[j.get_affinity()].insert({ j.earliest_arrival(), &j });
 				}
 
 				for (const Abort_action<Time>& a : aborts) {

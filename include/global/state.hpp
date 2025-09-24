@@ -43,7 +43,7 @@ namespace NP {
 			typedef std::vector<Susp_list> Predecessors;
 			typedef typename Cluster_state<Time>::Cluster_state_ref Cluster_state_ref;
 
-		private:
+		private:	
 			std::vector<Cluster_state_ref> clusters;
 			// job_finish_times holds the finish times of all the jobs that still have an unscheduled successor
 			Job_finish_times job_finish_times;
@@ -52,6 +52,14 @@ namespace NP {
 			std::vector<Time> earliest_certain_successor_job_disptach;
 
 		public:
+			~Schedule_state()
+			{
+				for (auto& cluster : clusters) {
+					release_cluster(cluster);
+				}
+				//clusters.clear();
+			}
+			
 			// initial state -- nothing yet has finished, nothing is running
 			Schedule_state(const std::vector<unsigned int>& num_cpus, const State_space_data<Time>& state_space_data)
 			: earliest_certain_successor_job_disptach(num_cpus.size(), Time_model::constants<Time>::infinity())
@@ -60,7 +68,7 @@ namespace NP {
 				clusters.reserve(num_cpus.size());
 				for (int i = 0; i < num_cpus.size(); i++)
 				{
-					clusters.push_back(std::make_shared<Cluster_state<Time>>(i, num_cpus[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
+					clusters.push_back(acquire_cluster<Time>(i, num_cpus[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
 				}
 			}
 
@@ -70,7 +78,7 @@ namespace NP {
 				clusters.reserve(proc_initial_state.size());
 				for (int i = 0; i < proc_initial_state.size(); i++)
 				{
-					clusters.push_back(std::make_shared<Cluster_state<Time>>(i, proc_initial_state[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
+					clusters.push_back(acquire_cluster<Time>(i, proc_initial_state[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
 				}
 			}
 
@@ -91,7 +99,7 @@ namespace NP {
 				clusters.reserve(from.clusters.size());
 				for (int i = 0; i < from.clusters.size(); i++) {
 					if (i == j.get_affinity())
-						clusters.push_back(std::make_shared<Cluster_state<Time>>(from.cluster(i), j.get_job_index(), start_times, finish_times, scheduled_jobs, state_space_data, next_source_job_rel, ncores));
+						clusters.push_back(acquire_cluster<Time>(from.cluster(i), j.get_job_index(), start_times, finish_times, scheduled_jobs, state_space_data, next_source_job_rel, ncores));
 					else
 						clusters.push_back(from.clusters[i]);
 				}
@@ -105,12 +113,11 @@ namespace NP {
 			void reset(const std::vector<unsigned int>& num_cpus, const State_space_data<Time>& state_space_data)
 			{
 				assert(num_cpus.size() > 0);
-				clusters.clear();
-				job_finish_times.clear();
+				clear();
 				clusters.reserve(num_cpus.size());
 				for (int i = 0; i < num_cpus.size(); i++)
 				{
-					clusters.push_back(std::make_shared<Cluster_state<Time>>(i, num_cpus[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
+					clusters.push_back(acquire_cluster(i, num_cpus[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
 				}
 				earliest_certain_successor_job_disptach = std::vector<Time>(num_cpus.size(), Time_model::constants<Time>::infinity());
 			}
@@ -118,12 +125,11 @@ namespace NP {
 			void reset(const std::vector<std::vector<Interval<Time>>>& proc_initial_state, const State_space_data<Time>& state_space_data)
 			{
 				assert(proc_initial_state.size() > 0 && proc_initial_state[0].size() > 0);
-				clusters.clear();
-				job_finish_times.clear();
+				clear();
 				clusters.reserve(proc_initial_state.size());
 				for (int i = 0; i < proc_initial_state.size(); i++)
 				{
-					clusters.push_back(std::make_shared<Cluster_state<Time>>(i, proc_initial_state[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
+					clusters.push_back(acquire_cluster<Time>(i, proc_initial_state[i], state_space_data.get_earliest_certain_gang_source_job_release(i)));
 				}
 				earliest_certain_successor_job_disptach = std::vector<Time>(proc_initial_state.size(), Time_model::constants<Time>::infinity());
 			}
@@ -140,13 +146,12 @@ namespace NP {
 				const State_space_data<Time>& state_space_data,
 				Time next_source_job_rel,
 				unsigned int ncores = 1)
-			{
-				clusters.clear();
-				job_finish_times.clear();				
+			{	
+				clear();
 				clusters.reserve(from.clusters.size());
 				for (int i = 0; i < from.clusters.size(); i++) {
 					if (i == j.get_affinity())
-						clusters.push_back(std::make_shared<Cluster_state<Time>>(from.cluster(i), j.get_job_index(), start_times, finish_times, scheduled_jobs, state_space_data, next_source_job_rel, ncores));
+						clusters.push_back(acquire_cluster<Time>(from.cluster(i), j.get_job_index(), start_times, finish_times, scheduled_jobs, state_space_data, next_source_job_rel, ncores));
 					else
 						clusters.push_back(from.clusters[i]);
 				}
@@ -155,6 +160,14 @@ namespace NP {
 				// NOTE: must be done after the finish times and core availabilities have been updated
 				earliest_certain_successor_job_disptach.resize(from.clusters.size());
 				update_earliest_certain_successor_job_disptach(ready_succ_jobs, state_space_data.predecessors_suspensions);
+			}
+
+			void clear() {
+				for (auto& cluster : clusters) {
+					release_cluster(cluster);
+				}
+				clusters.clear();
+				job_finish_times.clear();
 			}
 
 			// get the cluster state by its index
@@ -291,6 +304,7 @@ namespace NP {
 				const std::vector<std::vector<Job_ref>>& ready_succ_jobs,
 				const Predecessors& predecessors_of)
 			{
+				assert(earliest_certain_successor_job_disptach.size() == ready_succ_jobs.size());
 				std::fill(earliest_certain_successor_job_disptach.begin(), earliest_certain_successor_job_disptach.end(), Time_model::constants<Time>::infinity());
 				// we go through all successor jobs that are ready and update the earliest ready time
 				for (unsigned int cluster = 0; cluster < ready_succ_jobs.size(); cluster++)

@@ -8,6 +8,7 @@
 #include <functional> // for hash
 #include <exception>
 
+#include "robin_hood.h"
 #include "time.hpp"
 #include "interval.hpp"
 
@@ -58,17 +59,17 @@ namespace NP {
 		Job_index index;  // RV: index in the jobs array of the workload.
 
 		void compute_hash() {
-			auto h = std::hash<Time>{};
+			auto h = robin_hood::hash<size_t>{};
 			//RV: added index to the hash key, which seems to prevent collisions in state/node lookup keys.
 			key = h(index);
-			key = (key << 4) ^ h(arrival.from());
+			/*key = (key << 4) ^ h(arrival.from());
 			key = (key << 4) ^ h(id.task);
 			key = (key << 4) ^ h(arrival.until());
 			key = (key << 4) ^ h(exec_time.begin()->second.from());
 			key = (key << 4) ^ h(deadline);
 			key = (key << 4) ^ h(exec_time.begin()->second.upto());
 			key = (key << 4) ^ h(id.job);
-			key = (key << 4) ^ h(priority);
+			key = (key << 4) ^ h(priority);*/
 		}
 
 	public:

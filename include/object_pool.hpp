@@ -18,6 +18,10 @@ private:
 #endif
 
 public:
+	void clear() {
+        pool.clear();
+	}
+
     template <typename... Args>
     std::shared_ptr<T> acquire(Args&&... args) {
 #ifdef CONFIG_PARALLEL
@@ -44,6 +48,7 @@ public:
 #ifdef CONFIG_PARALLEL
         pool.push(obj);
 #else
+        obj->clear();
         pool.emplace_back(obj);
 #endif
     }

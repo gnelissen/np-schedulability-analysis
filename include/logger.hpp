@@ -228,33 +228,36 @@ namespace NP {
 					<< "[label=\"N" << id << ":";
 				if (conf.print_node_key) 
 					out << " Key=" << n->get_key();
-				const auto* n_states = n->get_states();
+				const auto& n_states = n->get_states();
 
 				int i = 0;
-				for (const State_ptr& s : *n_states)
+				for (const State_ptr& s : n_states)
 				{
 					out << "\\n---S" << i++ << "---";
 
 					if (conf.print_core_availability) {
-						out << "\\nAvail:{";
-						for (const auto& a : s->get_cores_availability()) {
-							out << "[" << a.from() << ", " << a.until() << "]";
+						for (int c = 0; c < n->get_num_clusters(); c++) {
+							out << "\\nClstr" << c << " Avail:{";
+							for (const auto& a : s->cluster(c).get_cores_availability()) {
+								out << "[" << a.from() << ", " << a.until() << "]";
+							}
 						}
-						out << "}";
 					}
 
 					if (conf.print_certainly_running_jobs) {
-						bool first = true;
-						out << "\\nRun:{";
-						for (const auto& rj : s->get_cert_running_jobs()) {
-							if (!first)
-								out << ", ";
-							out << "T" << jobs[rj.idx].get_task_id()
-								<< "J" << jobs[rj.idx].get_job_id() << ":["
-								<< rj.finish_time.min() << ", " << rj.finish_time.max() << "]";
-							first = false;
+						for (int c = 0; c < n->get_num_clusters(); c++) {
+							bool first = true;
+							out << "\\nClstr" << c << " Run:{";
+							for (const auto& rj : s->cluster(c).get_cert_running_jobs()) {
+								if (!first)
+									out << ", ";
+								out << "T" << jobs[rj.idx].get_task_id()
+									<< "J" << jobs[rj.idx].get_job_id() << ":["
+									<< rj.finish_time.min() << ", " << rj.finish_time.max() << "]";
+								first = false;
+							}
+							out << "}";
 						}
-						out << "}";
 					}
 
 					if (conf.print_pred_finish_times) {
@@ -264,16 +267,18 @@ namespace NP {
 				out << "\\n---------";
 
 				if(conf.print_ready_successors) {
-					out << "\\nReady:{";
-					bool first = true;
-					for (const Job<Time>* rj : n->get_ready_successor_jobs()) {
-						if (!first)
-							out << ", ";
-						out << "T" << jobs[rj->get_job_index()].get_task_id()
-							<< "J" << jobs[rj->get_job_index()].get_job_id();
-						first = false;
+					for (int c = 0; c < n->get_num_clusters(); c++) {
+						out << "\\nClstr" << c << " Ready:{";
+						bool first = true;
+						for (const Job<Time>* rj : n->get_ready_successor_jobs(c)) {
+							if (!first)
+								out << ", ";
+							out << "T" << jobs[rj->get_job_index()].get_task_id()
+								<< "J" << jobs[rj->get_job_index()].get_job_id();
+							first = false;
+						}
+						out << "}";
 					}
-					out << "}";
 				}				
 				out << "\"];"
 					<< std::endl;

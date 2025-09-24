@@ -95,6 +95,18 @@ namespace NP {
 		}
 
 		Scheduling_problem(const Workload& jobs,
+			const std::vector<unsigned int>& num_processors)
+			: jobs(jobs)
+		{
+			assert(num_processors.size() > 0);
+			for (auto n : num_processors) {
+				processors_initial_state.emplace_back(n, Interval<Time>(0, 0));
+				assert(n > 0);
+			}
+			validate_affinities<Time>(this->jobs, num_processors.size());
+		}
+
+		Scheduling_problem(const Workload& jobs,
 			const std::vector<std::vector<Interval<Time>>>& proc_init_state)
 			: jobs(jobs)
 			, processors_initial_state(proc_init_state)

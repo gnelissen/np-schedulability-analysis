@@ -10,9 +10,9 @@ static const auto inf = Time_model::constants<dtime_t>::infinity();
 
 TEST_CASE("[NP state space] Find all next jobs") {
 	Global::State_space<dtime_t>::Workload jobs{
-		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 8), 100, 1, 0, 0},
-		Job<dtime_t>{2, Interval<dtime_t>( 7,  7), Interval<dtime_t>(5, 5),  100, 2, 1, 1},
-		Job<dtime_t>{3, Interval<dtime_t>(10, 10), Interval<dtime_t>(1, 11),  100, 3, 2, 2},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 8), 100, 1, 0},
+		Job<dtime_t>{2, Interval<dtime_t>( 7,  7), Interval<dtime_t>(5, 5),  100, 2, 1},
+		Job<dtime_t>{3, Interval<dtime_t>(10, 10), Interval<dtime_t>(1, 11),  100, 3, 2},
 	};
 
 	SUBCASE("Naive exploration") {
@@ -51,9 +51,9 @@ TEST_CASE("[NP state space] Find all next jobs") {
 
 TEST_CASE("[NP state space] Consider large enough interval") {
 	Global::State_space<dtime_t>::Workload jobs{
-		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 10),  100, 3, 0, 0},
-		Job<dtime_t>{2, Interval<dtime_t>( 7,  7),  Interval<dtime_t>(5, 5),  100, 2, 1, 1},
-		Job<dtime_t>{3, Interval<dtime_t>(10, 10),  Interval<dtime_t>(5, 5),  100, 1, 2, 2},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 10),  100, 3, 0},
+		Job<dtime_t>{2, Interval<dtime_t>( 7,  7),  Interval<dtime_t>(5, 5),  100, 2, 1},
+		Job<dtime_t>{3, Interval<dtime_t>(10, 10),  Interval<dtime_t>(5, 5),  100, 1, 2},
 	};
 
 	auto nspace = Global::State_space<dtime_t>::explore_naively(jobs);
@@ -88,8 +88,8 @@ TEST_CASE("[NP state space] Consider large enough interval") {
 
 TEST_CASE("[NP state space] Respect priorities") {
 	Global::State_space<dtime_t>::Workload jobs{
-		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 10),  100, 2, 0, 0},
-		Job<dtime_t>{2, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(5, 5),  100, 1, 1, 1},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 10),  100, 2, 0},
+		Job<dtime_t>{2, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(5, 5),  100, 1, 1},
 	};
 
 	auto nspace = Global::State_space<dtime_t>::explore_naively(jobs);
@@ -116,8 +116,8 @@ TEST_CASE("[NP state space] Respect priorities") {
 
 TEST_CASE("[NP state space] Respect jitter") {
 	Global::State_space<dtime_t>::Workload jobs{
-		Job<dtime_t>{1, Interval<dtime_t>( 0,  1), Interval<dtime_t>(3, 10),  100, 2, 0, 0},
-		Job<dtime_t>{2, Interval<dtime_t>( 0,  1),  Interval<dtime_t>(5, 5),  100, 1, 1, 1},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  1), Interval<dtime_t>(3, 10),  100, 2, 0},
+		Job<dtime_t>{2, Interval<dtime_t>( 0,  1),  Interval<dtime_t>(5, 5),  100, 1, 1},
 	};
 
 	auto nspace = Global::State_space<dtime_t>::explore_naively(jobs);
@@ -144,9 +144,9 @@ TEST_CASE("[NP state space] Respect jitter") {
 
 TEST_CASE("[NP state space] Be eager") {
 	Global::State_space<dtime_t>::Workload jobs{
-		Job<dtime_t>{1, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1,  5),  100, 2, 0, 0},
-		Job<dtime_t>{2, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1, 20),  100, 3, 1, 1},
-		Job<dtime_t>{3, Interval<dtime_t>(10, 10),  Interval<dtime_t>(5,  5),  100, 1, 2, 2},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1,  5),  100, 2, 0},
+		Job<dtime_t>{2, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1, 20),  100, 3, 1},
+		Job<dtime_t>{3, Interval<dtime_t>(10, 10),  Interval<dtime_t>(5,  5),  100, 1, 2},
 	};
 
 	auto nspace = Global::State_space<dtime_t>::explore_naively(jobs);
@@ -180,9 +180,9 @@ TEST_CASE("[NP state space] Be eager") {
 
 TEST_CASE("[NP state space] Be eager, with short deadline") {
 	Global::State_space<dtime_t>::Workload jobs{
-		Job<dtime_t>{1, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1,  5),  100, 2, 0, 0},
-		Job<dtime_t>{2, Interval<dtime_t>( 9,  9),  Interval<dtime_t>(1, 15),   25, 3, 1, 1},
-		Job<dtime_t>{3, Interval<dtime_t>(30, 30),  Interval<dtime_t>(5,  5),  100, 1, 2, 2},
+		Job<dtime_t>{1, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1,  5),  100, 2, 0},
+		Job<dtime_t>{2, Interval<dtime_t>( 9,  9),  Interval<dtime_t>(1, 15),   25, 3, 1},
+		Job<dtime_t>{3, Interval<dtime_t>(30, 30),  Interval<dtime_t>(5,  5),  100, 1, 2},
 	};
 
 	auto nspace = Global::State_space<dtime_t>::explore_naively(jobs);
@@ -216,9 +216,9 @@ TEST_CASE("[NP state space] Be eager, with short deadline") {
 
 TEST_CASE("[NP state space] Treat equal-priority jobs correctly") {
 	Global::State_space<dtime_t>::Workload jobs{
-		Job<dtime_t>{1, Interval<dtime_t>(    0,    10),  Interval<dtime_t>( 2,    50),  2000, 1, 0, 0},
-		Job<dtime_t>{2, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(50,  1200),  5000, 2, 1, 1},
-		Job<dtime_t>{3, Interval<dtime_t>( 1000,  1010),  Interval<dtime_t>( 2,    50),  3000, 1, 2, 2},
+		Job<dtime_t>{1, Interval<dtime_t>(    0,    10),  Interval<dtime_t>( 2,    50),  2000, 1, 0},
+		Job<dtime_t>{2, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(50,  1200),  5000, 2, 1},
+		Job<dtime_t>{3, Interval<dtime_t>( 1000,  1010),  Interval<dtime_t>( 2,    50),  3000, 1, 2},
 	};
 
 	auto nspace = Global::State_space<dtime_t>::explore_naively(jobs);
@@ -251,8 +251,8 @@ TEST_CASE("[NP state space] Treat equal-priority jobs correctly") {
 
 TEST_CASE("[NP state space] Equal-priority simultaneous arrivals") {
 	Global::State_space<dtime_t>::Workload jobs{
-		Job<dtime_t>{1, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(  2,    50),  2000, 2000, 0, 0},
-		Job<dtime_t>{2, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(100,   150),  2000, 2000, 1, 1},
+		Job<dtime_t>{1, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(  2,    50),  2000, 2000, 0},
+		Job<dtime_t>{2, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(100,   150),  2000, 2000, 1},
 	};
 
 	auto nspace = Global::State_space<dtime_t>::explore_naively(jobs);
@@ -279,11 +279,11 @@ TEST_CASE("[NP state space] Equal-priority simultaneous arrivals") {
 
 TEST_CASE("[NP state space] don't skip over deadline-missing jobs") {
 	Global::State_space<dtime_t>::Workload jobs{
-		Job<dtime_t>{1, Interval<dtime_t>(  100,   100),  Interval<dtime_t>(   2,    50),   200, 1, 0, 0},
-		Job<dtime_t>{2, Interval<dtime_t>(    0,     0),  Interval<dtime_t>(1200,  1200),  5000, 2, 1, 1},
-		Job<dtime_t>{3, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 3, 2, 2},
-		Job<dtime_t>{4, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 4, 3, 3},
-		Job<dtime_t>{5, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 5, 4, 4},
+		Job<dtime_t>{1, Interval<dtime_t>(  100,   100),  Interval<dtime_t>(   2,    50),   200, 1, 0},
+		Job<dtime_t>{2, Interval<dtime_t>(    0,     0),  Interval<dtime_t>(1200,  1200),  5000, 2, 1},
+		Job<dtime_t>{3, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 3, 2},
+		Job<dtime_t>{4, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 4, 3},
+		Job<dtime_t>{5, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 5, 4},
 	};
 
 	SUBCASE("Naive exploration") {
@@ -390,9 +390,9 @@ TEST_CASE("[NP state space] don't skip over deadline-missing jobs") {
 
 TEST_CASE("[NP state space] explore across bucket boundaries") {
 	Global::State_space<dtime_t>::Workload jobs{
-		Job<dtime_t>{1, Interval<dtime_t>(  100,   100),  Interval<dtime_t>(  50,   50),  10000, 1, 0, 0},
-		Job<dtime_t>{2, Interval<dtime_t>( 3000,  3000),  Interval<dtime_t>(4000, 4000),  10000, 2, 1, 1},
-		Job<dtime_t>{3, Interval<dtime_t>( 6000,  6000),  Interval<dtime_t>(   2,    2),  10000, 3, 2, 2},
+		Job<dtime_t>{1, Interval<dtime_t>(  100,   100),  Interval<dtime_t>(  50,   50),  10000, 1, 0},
+		Job<dtime_t>{2, Interval<dtime_t>( 3000,  3000),  Interval<dtime_t>(4000, 4000),  10000, 2, 1},
+		Job<dtime_t>{3, Interval<dtime_t>( 6000,  6000),  Interval<dtime_t>(   2,    2),  10000, 3, 2},
 	};
 
 	Scheduling_problem<dtime_t> prob{jobs};
@@ -417,8 +417,8 @@ TEST_CASE("[NP state space] explore across bucket boundaries") {
 
 TEST_CASE("[NP state space] start times satisfy work-conserving property")
 {
-    Job<dtime_t> j0{0, Interval<dtime_t>( 0,  0), Interval<dtime_t>(2, 2), 10, 2, 0, 0};
-    Job<dtime_t> j1{1, Interval<dtime_t>(0, 8), Interval<dtime_t>(2, 2), 10, 1, 1, 1};
+    Job<dtime_t> j0{0, Interval<dtime_t>( 0,  0), Interval<dtime_t>(2, 2), 10, 2, 0};
+    Job<dtime_t> j1{1, Interval<dtime_t>(0, 8), Interval<dtime_t>(2, 2), 10, 1, 1};
 
 	Global::State_space<dtime_t>::Workload jobs{j0, j1};
 

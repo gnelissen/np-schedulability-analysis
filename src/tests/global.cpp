@@ -129,15 +129,13 @@ static const auto inf = Time_model::constants<dtime_t>::infinity();
 
 TEST_CASE("[global] Find all next jobs") {
 	NP::Job<dtime_t>::Job_set jobs{
-		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 8), 100, 1, 0, 0},
-		NP::Job<dtime_t>{2, Interval<dtime_t>( 7,  7), Interval<dtime_t>(5, 5),  100, 2, 1, 1},
-		NP::Job<dtime_t>{3, Interval<dtime_t>(10, 10), Interval<dtime_t>(1, 11),  100, 3, 2, 2},
+		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 8), 100, 1, 0},
+		NP::Job<dtime_t>{2, Interval<dtime_t>( 7,  7), Interval<dtime_t>(5, 5),  100, 2, 1},
+		NP::Job<dtime_t>{3, Interval<dtime_t>(10, 10), Interval<dtime_t>(1, 11),  100, 3, 2},
 	};
 
-	NP::Scheduling_problem<dtime_t> prob{jobs};
+	NP::Scheduling_problem<dtime_t> prob{jobs, 1};
 	NP::Analysis_options opts;
-
-	prob.num_processors = { 1 };
 
 	SUBCASE("Naive exploration") {
 		auto space = NP::Global::State_space<dtime_t>::explore_naively(jobs, 1);
@@ -151,7 +149,6 @@ TEST_CASE("[global] Find all next jobs") {
 
 		CHECK(space->get_finish_times(jobs[2]).from()  == 13);
 		CHECK(space->get_finish_times(jobs[2]).until() == 24); 
-		delete space;
 	}
 
 	SUBCASE("Exploration with merging") {
@@ -166,16 +163,15 @@ TEST_CASE("[global] Find all next jobs") {
 
 		CHECK(space->get_finish_times(jobs[2]).from()  == 13);
 		CHECK(space->get_finish_times(jobs[2]).until() == 24); 
-		delete space;
 	}
 
 }
 
 TEST_CASE("[global] Consider large enough interval") {
 	NP::Job<dtime_t>::Job_set jobs{
-		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 10),  100, 3, 0, 0},
-		NP::Job<dtime_t>{2, Interval<dtime_t>( 7,  7),  Interval<dtime_t>(5, 5),  100, 2, 1, 1},
-		NP::Job<dtime_t>{3, Interval<dtime_t>(10, 10),  Interval<dtime_t>(5, 5),  100, 1, 2, 2},
+		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 10),  100, 3, 0},
+		NP::Job<dtime_t>{2, Interval<dtime_t>( 7,  7),  Interval<dtime_t>(5, 5),  100, 2, 1},
+		NP::Job<dtime_t>{3, Interval<dtime_t>(10, 10),  Interval<dtime_t>(5, 5),  100, 1, 2},
 	};
 
 	auto nspace = NP::Global::State_space<dtime_t>::explore_naively(jobs, 1);
@@ -207,8 +203,8 @@ TEST_CASE("[global] Consider large enough interval") {
 
 TEST_CASE("[global] Respect priorities") {
 	NP::Job<dtime_t>::Job_set jobs{
-		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 10),  100, 2, 0, 0},
-		NP::Job<dtime_t>{2, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(5, 5),  100, 1, 1, 1},
+		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  0), Interval<dtime_t>(3, 10),  100, 2, 0},
+		NP::Job<dtime_t>{2, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(5, 5),  100, 1, 1},
 	};
 
 	auto nspace = NP::Global::State_space<dtime_t>::explore_naively(jobs, 1);
@@ -234,8 +230,8 @@ TEST_CASE("[global] Respect priorities") {
 
 TEST_CASE("[global] Respect jitter") {
 	NP::Job<dtime_t>::Job_set jobs{
-		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  1), Interval<dtime_t>(3, 10),  100, 2, 0, 0},
-		NP::Job<dtime_t>{2, Interval<dtime_t>( 0,  1),  Interval<dtime_t>(5, 5),  100, 1, 1, 1},
+		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  1), Interval<dtime_t>(3, 10),  100, 2, 0},
+		NP::Job<dtime_t>{2, Interval<dtime_t>( 0,  1),  Interval<dtime_t>(5, 5),  100, 1, 1},
 	};
 
 	auto nspace = NP::Global::State_space<dtime_t>::explore_naively(jobs, 1);
@@ -261,9 +257,9 @@ TEST_CASE("[global] Respect jitter") {
 
 TEST_CASE("[global] Be eager") {
 	NP::Job<dtime_t>::Job_set jobs{
-		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1,  5),  100, 2, 0, 0},
-		NP::Job<dtime_t>{2, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1, 20),  100, 3, 1, 1},
-		NP::Job<dtime_t>{3, Interval<dtime_t>(10, 10),  Interval<dtime_t>(5,  5),  100, 1, 2, 2},
+		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1,  5),  100, 2, 0},
+		NP::Job<dtime_t>{2, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1, 20),  100, 3, 1},
+		NP::Job<dtime_t>{3, Interval<dtime_t>(10, 10),  Interval<dtime_t>(5,  5),  100, 1, 2},
 	};
 
 	auto nspace = NP::Global::State_space<dtime_t>::explore_naively(jobs, 1);
@@ -296,9 +292,9 @@ TEST_CASE("[global] Be eager") {
 
 TEST_CASE("[global] Be eager, with short deadline") {
 	NP::Job<dtime_t>::Job_set jobs{
-		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1,  5),  100, 2, 0, 0},
-		NP::Job<dtime_t>{2, Interval<dtime_t>( 9,  9),  Interval<dtime_t>(1, 15),   25, 3, 1, 1},
-		NP::Job<dtime_t>{3, Interval<dtime_t>(30, 30),  Interval<dtime_t>(5,  5),  100, 1, 2, 2},
+		NP::Job<dtime_t>{1, Interval<dtime_t>( 0,  0),  Interval<dtime_t>(1,  5),  100, 2, 0},
+		NP::Job<dtime_t>{2, Interval<dtime_t>( 9,  9),  Interval<dtime_t>(1, 15),   25, 3, 1},
+		NP::Job<dtime_t>{3, Interval<dtime_t>(30, 30),  Interval<dtime_t>(5,  5),  100, 1, 2},
 	};
 
 	auto nspace = NP::Global::State_space<dtime_t>::explore_naively(jobs, 1);
@@ -331,9 +327,9 @@ TEST_CASE("[global] Be eager, with short deadline") {
 
 TEST_CASE("[global] Treat equal-priority jobs correctly") {
 	NP::Job<dtime_t>::Job_set jobs{
-		NP::Job<dtime_t>{1, Interval<dtime_t>(    0,    10),  Interval<dtime_t>( 2,    50),  2000, 1, 0, 0},
-		NP::Job<dtime_t>{2, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(50,  1200),  5000, 2, 1, 1},
-		NP::Job<dtime_t>{3, Interval<dtime_t>( 1000,  1010),  Interval<dtime_t>( 2,    50),  3000, 1, 2, 2},
+		NP::Job<dtime_t>{1, Interval<dtime_t>(    0,    10),  Interval<dtime_t>( 2,    50),  2000, 1, 0},
+		NP::Job<dtime_t>{2, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(50,  1200),  5000, 2, 1},
+		NP::Job<dtime_t>{3, Interval<dtime_t>( 1000,  1010),  Interval<dtime_t>( 2,    50),  3000, 1, 2},
 	};
 
 	auto nspace = NP::Global::State_space<dtime_t>::explore_naively(jobs, 1);
@@ -365,8 +361,8 @@ TEST_CASE("[global] Treat equal-priority jobs correctly") {
 
 TEST_CASE("[global] Equal-priority simultaneous arrivals") {
 	NP::Job<dtime_t>::Job_set jobs{
-		NP::Job<dtime_t>{1, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(  2,    50),  2000, 2000, 0, 0},
-		NP::Job<dtime_t>{2, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(100,   150),  2000, 2000, 1, 1},
+		NP::Job<dtime_t>{1, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(  2,    50),  2000, 2000, 0},
+		NP::Job<dtime_t>{2, Interval<dtime_t>(    0,    10),  Interval<dtime_t>(100,   150),  2000, 2000, 1},
 	};
 
 	auto nspace = NP::Global::State_space<dtime_t>::explore_naively(jobs, 1);
@@ -392,11 +388,11 @@ TEST_CASE("[global] Equal-priority simultaneous arrivals") {
 
 TEST_CASE("[global] don't skip over deadline-missing jobs") {
 	NP::Job<dtime_t>::Job_set jobs{
-		NP::Job<dtime_t>{1, Interval<dtime_t>(  100,   100),  Interval<dtime_t>(   2,    50),   200, 1, 0, 0},
-		NP::Job<dtime_t>{2, Interval<dtime_t>(    0,     0),  Interval<dtime_t>(1200,  1200),  5000, 2, 1, 1},
-		NP::Job<dtime_t>{3, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 3, 2, 2},
-		NP::Job<dtime_t>{4, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 4, 3, 3},
-		NP::Job<dtime_t>{5, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 5, 4, 4},
+		NP::Job<dtime_t>{1, Interval<dtime_t>(  100,   100),  Interval<dtime_t>(   2,    50),   200, 1, 0},
+		NP::Job<dtime_t>{2, Interval<dtime_t>(    0,     0),  Interval<dtime_t>(1200,  1200),  5000, 2, 1},
+		NP::Job<dtime_t>{3, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 3, 2},
+		NP::Job<dtime_t>{4, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 4, 3},
+		NP::Job<dtime_t>{5, Interval<dtime_t>(  200,   250),  Interval<dtime_t>( 2,    50),    6000, 5, 4},
 	};
 
 	auto nspace = NP::Global::State_space<dtime_t>::explore_naively(jobs, 1);
@@ -416,9 +412,9 @@ TEST_CASE("[global] don't skip over deadline-missing jobs") {
 
 TEST_CASE("[global] explore across bucket boundaries") {
 	NP::Job<dtime_t>::Job_set jobs{
-		NP::Job<dtime_t>{1, Interval<dtime_t>(  100,   100),  Interval<dtime_t>(  50,   50),  10000, 1, 0, 0},
-		NP::Job<dtime_t>{2, Interval<dtime_t>( 3000,  3000),  Interval<dtime_t>(4000, 4000),  10000, 2, 1, 1},
-		NP::Job<dtime_t>{3, Interval<dtime_t>( 6000,  6000),  Interval<dtime_t>(   2,    2),  10000, 3, 2, 2},
+		NP::Job<dtime_t>{1, Interval<dtime_t>(  100,   100),  Interval<dtime_t>(  50,   50),  10000, 1, 0},
+		NP::Job<dtime_t>{2, Interval<dtime_t>( 3000,  3000),  Interval<dtime_t>(4000, 4000),  10000, 2, 1},
+		NP::Job<dtime_t>{3, Interval<dtime_t>( 6000,  6000),  Interval<dtime_t>(   2,    2),  10000, 3, 2},
 	};
 
 	NP::Scheduling_problem<dtime_t> prob{jobs};

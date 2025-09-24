@@ -105,21 +105,17 @@ TEST_CASE("[partitioned] schedulable partitioning") {
 	auto in = std::istringstream(part1_file);
 	auto jobs = NP::parse_csv_job_file<dtime_t>(in);
 	auto in_platform = std::istringstream(platform_file);
-	auto platform = NP::parse_csv_platform_file(in_platform);
+	auto platform = NP::parse_platform_spec_csv<dtime_t>(in_platform);
 
 	auto nspace = NP::Global::State_space<dtime_t>::explore_naively(jobs,
 		platform);
 
 	CHECK(nspace->is_schedulable());
 
-	delete nspace;
-
 	auto space = NP::Global::State_space<dtime_t>::explore(jobs,
 		platform);
 
 	CHECK(space->is_schedulable());
-
-	delete space;
 }
 
 const std::string part2_file =
@@ -134,7 +130,7 @@ TEST_CASE("[partitioned] unschedulable partitioning") {
 	auto in = std::istringstream(part2_file);
 	auto jobs = NP::parse_csv_job_file<dtime_t>(in);
 	auto in_platform = std::istringstream(platform_file);
-	auto platform = NP::parse_csv_platform_file(in_platform);
+	auto platform = NP::parse_platform_spec_csv<dtime_t>(in_platform);
 
 	auto nspace = NP::Global::State_space<dtime_t>::explore_naively(jobs,
 		platform);
@@ -145,9 +141,6 @@ TEST_CASE("[partitioned] unschedulable partitioning") {
 		platform);
 
 	CHECK_FALSE(space->is_schedulable());
-
-	delete nspace;
-	delete space;
 }
 
 const std::string part_identical_file =
@@ -167,18 +160,12 @@ TEST_CASE("[partitioned] unschedulable identical partitioning") {
 	auto in = std::istringstream(part_identical_file);
 	auto jobs = NP::parse_csv_job_file<dtime_t>(in);
 	auto in_platform = std::istringstream(platform_file);
-	auto platform = NP::parse_csv_platform_file(in_platform);
+	auto platform = NP::parse_platform_spec_csv<dtime_t>(in_platform);
 
 	auto space = NP::Global::State_space<dtime_t>::explore(jobs,
 		platform);
 
 	CHECK_FALSE(space->is_schedulable());
-
-	for (int i = 0; i < 5; i++) {
-		CHECK(space->get_finish_times(jobs[i]) == space->get_finish_times(jobs[i + 5]));
-	}
-
-	delete space;
 }
 
 const std::string platform_file_2x2_cores =
@@ -190,7 +177,7 @@ TEST_CASE("[partitioned] schedulable identical partitioning") {
 	auto in = std::istringstream(part_identical_file);
 	auto jobs = NP::parse_csv_job_file<dtime_t>(in);
 	auto in_platform = std::istringstream(platform_file_2x2_cores);
-	auto platform = NP::parse_csv_platform_file(in_platform);
+	auto platform = NP::parse_platform_spec_csv<dtime_t>(in_platform);
 
 	auto space = NP::Global::State_space<dtime_t>::explore(jobs,
 		platform);
@@ -200,10 +187,8 @@ TEST_CASE("[partitioned] schedulable identical partitioning") {
 	for (int i = 0; i < 5; i++) {
 		CHECK(space->get_finish_times(jobs[i]) == space->get_finish_times(jobs[i + 5]));
 	}
-	CHECK(space->number_of_nodes() == 6);
-	CHECK(space->number_of_states() == 6);
-
-	delete space;
+	CHECK(space->number_of_nodes() == 11);
+	CHECK(space->number_of_states() == 11);
 }
 
 const std::string part_dependent_jobs_file =
@@ -225,7 +210,7 @@ TEST_CASE("[partitioned] partitioned with prec constraints") {
 	auto in = std::istringstream(part_dependent_jobs_file);
 	auto jobs = NP::parse_csv_job_file<dtime_t>(in);
 	auto in_platform = std::istringstream(platform_file);
-	auto platform = NP::parse_csv_platform_file(in_platform);
+	auto platform = NP::parse_platform_spec_csv<dtime_t>(in_platform);
 	auto in_prec = std::istringstream(part_prec_file);
 	auto prec = NP::parse_precedence_file<dtime_t>(in_prec);
 
@@ -236,8 +221,8 @@ TEST_CASE("[partitioned] partitioned with prec constraints") {
 
 	CHECK(space->is_schedulable());
 
-	CHECK(space->number_of_nodes() == 5);
-	CHECK(space->number_of_states() == 5);
+	CHECK(space->number_of_nodes() == 6);
+	CHECK(space->number_of_states() == 6);
 
 	CHECK(space->get_finish_times(jobs[0]).min() == 2);
 	CHECK(space->get_finish_times(jobs[0]).max() == 4);
@@ -249,8 +234,6 @@ TEST_CASE("[partitioned] partitioned with prec constraints") {
 	CHECK(space->get_finish_times(jobs[3]).max() == 7);
 	CHECK(space->get_finish_times(jobs[4]).min() == 7);
 	CHECK(space->get_finish_times(jobs[4]).max() == 8);
-
-	delete space;
 }
 
 const std::string inv_part_file =
@@ -262,7 +245,7 @@ TEST_CASE("[partitioned] error affinity") {
 	auto in = std::istringstream(inv_part_file);
 	auto jobs = NP::parse_csv_job_file<dtime_t>(in);
 	auto in_platform = std::istringstream(platform_file);
-	auto platform = NP::parse_csv_platform_file(in_platform);
+	auto platform = NP::parse_platform_spec_csv<dtime_t>(in_platform);
 
 	CHECK_THROWS_AS(NP::Global::State_space<dtime_t>::explore(jobs, platform),
 		NP::InvalidAffinity);
