@@ -13,18 +13,6 @@ namespace NP
 			virtual ~Problem_extension_base() = default;
 		};
 
-		template<typename Derived>
-		struct Problem_extension : public Problem_extension_base
-		{
-			Problem_extension() = default;
-			virtual ~Problem_extension() = default;
-
-			template<typename ...Args>
-			static size_t register_extension(Args&& ...args) {
-				return Problem_extensions::register_extension(std::make_unique<Derived>(std::forward<Args>(args)...));
-			}
-		};
-
 		class Problem_extensions
 		{
 		public:
@@ -59,6 +47,18 @@ namespace NP
 
 		private:
 			static std::vector<std::unique_ptr<Problem_extension_base>> extensions;
+		};
+
+		template<typename Derived>
+		struct Problem_extension : public Problem_extension_base
+		{
+			Problem_extension() = default;
+			virtual ~Problem_extension() = default;
+
+			template<typename ...Args>
+			static size_t register_extension(Args&& ...args) {
+				return Problem_extensions::register_extension(std::make_unique<Derived>(std::forward<Args>(args)...));
+			}
 		};
 
 	} // namespace Global
