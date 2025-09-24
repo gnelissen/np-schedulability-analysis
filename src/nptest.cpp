@@ -11,6 +11,11 @@
 #include "io.hpp"
 #include "clock.hpp"
 
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+#include "global/extension/taskchains/taskchains.hpp"
+#include "global/extension/taskchains/taskchains_problem_extension.hpp"
+#endif
+
 #define MAX_PROCESSORS 512
 
 // command line options
@@ -29,6 +34,11 @@ static unsigned int num_threads = 0;
 #ifdef CONFIG_PRUNING
 static bool want_focus = false;
 static std::string focus_file;
+#endif
+
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+static std::string task_chains_file;
+static bool want_task_chain;
 #endif
 
 static bool want_precedence = false;
@@ -73,6 +83,9 @@ struct Analysis_result {
 	std::string response_times_csv;
 	std::string width_evolution_csv;
 	std::string deadline_mis_info;
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+	std::string taskchains_results;
+#endif
 };
 
 
@@ -146,6 +159,24 @@ static Analysis_result analyze(
 		opts.pruning_cond = NP::parse_focused_expl_spec_yaml<Time>(focus_in, jobs);
 	}
 #endif
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+	size_t num_taskchains = 0;
+	auto taskchain_stream = std::ifstream();
+	if (want_task_chain) {
+		taskchain_stream.open(task_chains_file);
+		//check the extension of the file
+		std::string ext = task_chains_file.substr(task_chains_file.find_last_of(".") + 1);
+		if (ext == "csv" or ext == "CSV") {
+			std::cerr << "Error: CSV task chain file is not supported yet, use YAML format instead." << std::endl;
+			exit(1);
+		}
+		// Parse the task chain file
+		auto taskchains = NP::Global::Taskchains_analysis::parse_yaml_task_chain_file<Time>(taskchain_stream);
+		num_taskchains = taskchains.size();
+		// Register the task chain analysis extension in the scheduling problem definition
+		NP::Global::Taskchains_analysis::Taskchains_problem_extension<Time>::register_extension(taskchains);
+	}
+#endif
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 	NP::Global::Log_options<Time> log_opts;
 	log_opts.log = want_dot_graph;
@@ -206,6 +237,17 @@ static Analysis_result analyze(
 		deadline_miss_state.second->export_state(deadline_miss_stream, jobs);
 	}
 
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+	auto taskchains_results = std::ostringstream();
+	if (want_task_chain) {
+		taskchains_results << "Task chain id, max data age, max reaction time" << std::endl;
+		for (unsigned long i = 0; i < num_taskchains; i++) {
+			taskchains_results << i << ", " << space->get_max_data_age(i)
+				<< ", " << space->get_max_reaction_time(i) << std::endl;
+		}
+	}
+#endif
+
 	Analysis_result results = Analysis_result{
 		space->is_schedulable(),
 		space->was_timed_out(),
@@ -222,6 +264,9 @@ static Analysis_result analyze(
 		rta.str(),
 		width_stream.str(),
 		deadline_miss_stream.str()
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+		, taskchains_results.str()
+#endif
 	};
 	return results;
 }
@@ -385,6 +430,19 @@ static void process_file(const std::string& fname)
 					out.close();
 				}
 			}
+
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+			if (want_task_chain) {
+				std::string task_chain_file_name = fname;
+				auto p = task_chain_file_name.find_last_of(".");
+				if (p != std::string::npos) {
+					task_chain_file_name.replace(p, std::string::npos, ".taskchains.csv");
+					auto out = std::ofstream(task_chain_file_name, std::ios::out);
+					out << result.taskchains_results;
+					out.close();
+				}
+			}
+#endif
 		}
 
 		Memory_monitor mem;
@@ -560,6 +618,9 @@ int main(int argc, char** argv)
 		.help("If 'USE_PRUNING' is set, allows to send a YAML file specifying what part of the state-space to focus on or prune during the exploration.")
 		.set_default("");
 
+	parser.add_option("--taskchains").dest("task_chains_file").set_default("")
+		.help("yaml file of task chains");
+
 	auto options = parser.parse_args(argc, argv);
 	//all the options that could have been entered above are processed below and appropriate variables
 	// are assigned their respective values.
@@ -702,6 +763,18 @@ int main(int argc, char** argv)
 		std::cerr << "Error: Focused exploration support must be enabled "
 				  << "during compilation (CONFIG_PRUNING is not set)."
 				  << std::endl;
+		return 2;
+	}
+#endif
+
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+	want_task_chain = options.is_set_by_user("task_chains_file");
+	task_chains_file = (const std::string&)options.get("task_chains_file");
+#else
+	if (options.is_set_by_user("task_chains_file")) {
+		std::cerr << "Error: Task chains support must be enabled "
+			<< "during compilation (CONFIG_ANALYSIS_EXTENSIONS "
+			<< "is not set)." << std::endl;
 		return 2;
 	}
 #endif

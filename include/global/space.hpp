@@ -38,6 +38,11 @@
 #include "global/secateur.hpp"
 #endif
 
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+#include "global/extension/taskchains/taskchains_extension.hpp"
+#include "global/extension/taskchains/taskchains_problem_extension.hpp"
+#endif
+
 namespace NP {
 
 	namespace Global {
@@ -69,6 +74,9 @@ namespace NP {
 
 				Merge_options merge_opts{opts.merge_conservative, opts.merge_use_job_finish_times, opts.merge_depth};
 				auto s = std::unique_ptr<State_space>(new State_space(prob.jobs, prob.prec, prob.aborts, prob.mutexes, prob.processors_initial_state,
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+					prob.problem_extensions,
+#endif
 					merge_opts, opts.timeout, opts.max_memory_usage, opts.max_depth, opts.early_exit, opts.verbose, log_opts
 #ifdef CONFIG_PARALLEL
 					, opts.parallel_enabled, opts.num_threads
@@ -92,6 +100,9 @@ namespace NP {
 
 				Merge_options merge_opts{opts.merge_conservative, opts.merge_use_job_finish_times, opts.merge_depth};
 				auto s = std::unique_ptr<State_space>(new State_space(prob.jobs, prob.prec, prob.aborts, prob.mutexes, prob.processors_initial_state,
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+					prob.problem_extensions,
+#endif
 					merge_opts, opts.timeout, opts.max_memory_usage, opts.max_depth, opts.early_exit, opts.verbose
 #ifdef CONFIG_PARALLEL
 					, opts.parallel_enabled, opts.num_threads
@@ -157,6 +168,43 @@ namespace NP {
 					return Interval<Time>{0, Time_model::constants<Time>::infinity()};
 				}
 			}
+
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+			// return the maximum data age of taskchain `tc_id`
+			Time get_max_data_age(unsigned long tc_id) const
+			{
+				auto tc_data = state_space_data.get_extensions().get<Taskchains_analysis::Taskchains_sp_data_extension<Time>>();
+				if (tc_data == nullptr) {
+					std::cerr << "Error: Task chain data extension is not available." << std::endl;
+					return 0;
+				}
+				if (tc_id < tc_data->get_task_chains().size()) {
+					return tc_data->get_max_data_age(tc_id);
+				}
+				else {
+					std::cerr << "Error: Task chain ID " << tc_id << " is out of bounds." << std::endl;
+					return 0;
+				}
+			}
+
+			// return the maximum reaction time of taskchain `tc_id`
+			Time get_max_reaction_time(unsigned long tc_id) const
+			{
+				auto tc_data = state_space_data.get_extensions().get<Taskchains_analysis::Taskchains_sp_data_extension<Time>>();
+				if (tc_data == nullptr) {
+					std::cerr << "Error: Task chain data extension is not available." << std::endl;
+					return 0;
+				}
+				if (tc_id < tc_data->get_task_chains().size()) {
+
+					return tc_data->get_max_reaction_time(tc_id);
+				}
+				else {
+					std::cerr << "Error: Task chain ID " << tc_id << " is out of bounds." << std::endl;
+					return 0;
+				}
+			}
+#endif // CONFIG_ANALYSIS_EXTENSIONS
 
 			bool is_schedulable() const
 			{
@@ -301,6 +349,9 @@ namespace NP {
 				const Abort_actions& aborts,
 				const Mutex_constraints& mutexes,
 				const std::vector<Interval<Time>>& cores_initial_state,
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+				const Problem_extensions& problem_extensions,
+#endif
 				Merge_options merge_options,
 				double max_cpu_time = 0,
 				long max_memory = 0,
@@ -372,7 +423,16 @@ namespace NP {
 				for (size_t i = 0; i < rta_mutexes.size(); ++i) {
 					rta_mutexes[i] = std::make_unique<std::mutex>();
 				}
-#endif
+#endif // CONFIG_PARALLEL
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+				// check if the taskchains extension is registered
+				auto tc_ext = problem_extensions.get<Taskchains_analysis::Taskchains_problem_extension<Time>>();
+				if (tc_ext)
+				{
+					// If yes, activate task chains analysis
+					Taskchains_analysis::Taskchains_analysis_extension<Time>::activate(jobs, tc_ext->taskchains);
+				}
+#endif // CONFIG_ANALYSIS_EXTENSIONS
 			}
 
 		private:
