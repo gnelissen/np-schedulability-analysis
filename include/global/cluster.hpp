@@ -123,13 +123,12 @@ namespace NP {
 				: cluster_id(from.cluster_id)
 				, core_avail(from.core_avail)
 			{
-				const Predecessors& predecessors_of = state_space_data.predecessors_suspensions;
-				const Job_precedence_set& predecessors = state_space_data.predecessors_of(j);
+				const Job_precedence_set& predecessors = state_space_data.predecessors_of(j, cluster_id);
 				// update the set of certainly running jobs
 				int n_prec =update_certainly_running_jobs(from, j, start_times, finish_times, ncores, predecessors);
 
 				// calculate the cores availability intervals resulting from dispatching job j on ncores in state 'from'
-				update_core_avail(from, j, predecessors, n_prec, start_times, finish_times, ncores);
+				update_core_avail(from, j, n_prec, start_times, finish_times, ncores);
 
 				assert(core_avail.size() > 0);
 
@@ -196,18 +195,16 @@ namespace NP {
 				Time next_source_job_rel,
 				unsigned int ncores = 1)
 			{
-				assert(core_avail.size() == from.core_avail.size());
 				cluster_id = from.cluster_id;
 				clear();
-				//core_avail.resize(from.core_avail.size());
+				core_avail.resize(from.core_avail.size());
 
-				const Predecessors& predecessors_of = state_space_data.predecessors_suspensions;
-				const Job_precedence_set& predecessors = state_space_data.predecessors_of(j);
+				const Job_precedence_set& predecessors = state_space_data.predecessors_of(j, cluster_id);
 				// update the set of certainly running jobs
 				int n_prec = update_certainly_running_jobs(from, j, start_times, finish_times, ncores, predecessors);
 
 				// calculate the cores availability intervals resulting from dispatching job j on ncores in state 'from'
-				update_core_avail(from, j, predecessors, n_prec, start_times, finish_times, ncores);
+				update_core_avail(from, j, n_prec, start_times, finish_times, ncores);
 
 				assert(core_avail.size() > 0);
 
@@ -475,8 +472,8 @@ namespace NP {
 			}
 
 			// update the core availability resulting from scheduling job j on m cores in state 'from'
-			void update_core_avail(const Cluster_state& from, const Job_index j, const Job_precedence_set& predecessors,
-				int n_prec, const Interval<Time>& start_times, const Interval<Time>& finish_times, const unsigned int m)
+			void update_core_avail(const Cluster_state& from, const Job_index j, int n_prec, 
+				const Interval<Time>& start_times, const Interval<Time>& finish_times, const unsigned int m)
 			{
 				int n_cores = from.core_avail.size();
 				//core_avail.clear();

@@ -234,7 +234,7 @@ namespace NP {
 			return this->id == search_id;
 		}
 
-				Job_index get_job_index() const
+		Job_index get_job_index() const
 		{
 			return index;
 		}

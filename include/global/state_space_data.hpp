@@ -44,7 +44,10 @@ namespace NP {
 			std::vector<By_time_map> _gang_source_jobs_by_latest_arrival_by_cluster;
 			std::vector<By_time_map> _jobs_by_earliest_arrival_by_cluster;
 			std::vector<By_time_map> _jobs_by_deadline;
-			std::vector<Job_precedence_set> _predecessors;
+			// set of predecessors for each job, per cluster
+			std::vector<std::vector<Job_precedence_set>> _predecessors;
+			// set of jobs assigned to each cluster with predecessors globally but no local predecessors on the same cluster
+			std::vector<std::vector<Job_ref>> _locally_ready_jobs;
 
 			// not touched after initialization
 			std::vector<Suspensions_list> _predecessors_suspensions;
@@ -65,7 +68,7 @@ namespace NP {
 			const std::vector<By_time_map>& gang_source_jobs_by_latest_arrival_by_cluster;
 			const std::vector<By_time_map>& jobs_by_earliest_arrival_by_cluster;
 			const std::vector<By_time_map>& jobs_by_deadline;
-			const std::vector<Job_precedence_set>& predecessors;
+			const std::vector<std::vector<Job_precedence_set>>& predecessors;
 			const std::vector<Suspensions_list>& predecessors_suspensions;
 			const std::vector<Suspensions_list>& successors_suspensions;
 
@@ -86,13 +89,14 @@ namespace NP {
 				, gang_source_jobs_by_latest_arrival_by_cluster(_gang_source_jobs_by_latest_arrival_by_cluster)
 				, jobs_by_earliest_arrival_by_cluster(_jobs_by_earliest_arrival_by_cluster)
 				, jobs_by_deadline(_jobs_by_deadline)
-				, _predecessors(jobs.size())
+				, _predecessors(jobs.size(), std::vector<Job_precedence_set>(cores_initial_states.size()))
 				, predecessors(_predecessors)
 				, _predecessors_suspensions(jobs.size())
 				, _successors_suspensions(jobs.size())
 				, predecessors_suspensions(_predecessors_suspensions)
 				, successors_suspensions(_successors_suspensions)
 				, abort_actions(jobs.size(), NULL)
+				, _locally_ready_jobs(cores_initial_states.size())
 			{
 				for (unsigned int i = 0; i < num_clusters; i++) {
 					num_cpus[i] = cores_initial_states[i].size();
@@ -100,7 +104,7 @@ namespace NP {
 
 				for (const auto& e : edges) {
 					_predecessors_suspensions[e.get_toIndex()].push_back({ &jobs[e.get_fromIndex()], e.get_suspension() });
-					_predecessors[e.get_toIndex()].push_back(e.get_fromIndex());
+					_predecessors[e.get_toIndex()][jobs[e.get_fromIndex()].get_affinity()].push_back(e.get_fromIndex());
 					_successors_suspensions[e.get_fromIndex()].push_back({ &jobs[e.get_toIndex()], e.get_suspension() });
 				}
 
@@ -115,8 +119,12 @@ namespace NP {
 					else {
 						_gang_source_jobs_by_latest_arrival_by_cluster[j.get_affinity()].insert({ j.latest_arrival(), &j });
 						_jobs_by_earliest_arrival_by_cluster[j.get_affinity()].insert({ j.earliest_arrival(), &j });
-					}					
+					}
 					_jobs_by_deadline[j.get_affinity()].insert({ j.get_deadline(), &j });
+
+					if (_predecessors[j.get_job_index()][j.get_affinity()].empty() && !_predecessors_suspensions[j.get_job_index()].empty()) {
+						_locally_ready_jobs[j.get_affinity()].push_back(&j);
+					}
 				}
 
 				for (const Abort_action<Time>& a : aborts) {
@@ -130,19 +138,19 @@ namespace NP {
 				return jobs.size();
 			}
 
-			const Job_precedence_set& predecessors_of(const Job<Time>& j) const
+			const Job_precedence_set& predecessors_of(Job_index j, unsigned int cluster) const
 			{
-				return predecessors[j.get_job_index()];
-			}
-
-			const Job_precedence_set& predecessors_of(Job_index j) const
-			{
-				return predecessors[j];
+				return predecessors[j][cluster];
 			}
 
 			const Abort_action<Time>* abort_action_of(Job_index j) const
 			{
 				return abort_actions[j];
+			}
+
+			const std::vector<std::vector<Job_ref>>& get_locally_ready_jobs() const
+			{
+				return _locally_ready_jobs;
 			}
 
 			// returns the ready time interval of `j` in `s`
@@ -429,7 +437,7 @@ namespace NP {
 				return latest_ready_high;
 			}
 
-			// Find the earliest possible job release of all jobs in a node except for the ignored job
+			// Find the earliest possible job release of all jobs in a node except for the ignored job on the same cluster as the ignored job
 			Time earliest_possible_job_release(
 				const Node& n,
 				const Job<Time>& ignored_job) const

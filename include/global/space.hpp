@@ -847,9 +847,9 @@ namespace NP {
 						{
 							const auto pair_it = nodes_by_key.find(n->next_key(*j));
 							if (pair_it != nodes_by_key.end()) {
-								//Job_set next_scheduled_jobs{ n->get_scheduled_jobs(), j->get_job_index() };
+								Job_set next_scheduled_jobs{ n->get_scheduled_jobs(), j->get_job_index() };
 								for (Node_ref other : pair_it->second) {
-									if (other->get_scheduled_jobs().matches(n->get_scheduled_jobs(), j->get_job_index()))
+									if (other->get_scheduled_jobs() == next_scheduled_jobs)//.matches(n->get_scheduled_jobs(), j->get_job_index()))
 									{
 										next = other;
 										DM("=== dispatch: next exists." << std::endl);
@@ -1089,7 +1089,7 @@ namespace NP {
 						// if the earliest time a job may start on the cluster  
 						// is later than when a job certainly starts on any cluster, 
 						// we do not dispatch anything on that cluster
-						if (t_min[cluster_id] > upbnd_t_wc_any)
+						if (n->earliest_core_availability(cluster_id) > upbnd_t_wc_any)
 							continue;
 
 						//check all jobs that may be eligible to be dispatched next
