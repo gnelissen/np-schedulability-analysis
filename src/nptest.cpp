@@ -86,9 +86,9 @@ static Analysis_result analyze(
 {
 	// Parse input files and create NP scheduling problem description
 	typename NP::Job<Time>::Job_set jobs = in_is_yaml ? NP::parse_yaml_job_file<Time>(in) : NP::parse_csv_job_file<Time>(in);
-
+	auto job_lookup = NP::make_job_lookup<Time>(jobs);
 	// Parse precedence constraints
-	std::vector<NP::Precedence_constraint<Time>> edges = dag_is_yaml ? NP::parse_yaml_dag_file<Time>(prec_in) : NP::parse_precedence_file<Time>(prec_in);
+	std::unique_ptr<std::vector<NP::Precedence_constraint<Time>>> edges = dag_is_yaml ? NP::parse_yaml_dag_file<Time>(prec_in, job_lookup) : NP::parse_precedence_file<Time>(prec_in, job_lookup);
 
 	// Parse platform specification if provided
 	std::vector<std::vector<Interval<Time>>> platform_spec;
@@ -103,7 +103,7 @@ static Analysis_result analyze(
 
 	NP::Scheduling_problem<Time> problem{
 		jobs,
-		edges,
+		*edges,
 		NP::parse_abort_file<Time>(aborts_in),
 		platform_spec };
 

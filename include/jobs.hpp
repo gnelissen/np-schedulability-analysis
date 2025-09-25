@@ -3,7 +3,7 @@
 
 #include <ostream>
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <algorithm> // for find
 #include <functional> // for hash
 #include <exception>
@@ -332,6 +332,17 @@ namespace NP {
 		return *pos;
 	}
 
+	typedef std::unordered_map<JobID, Job_index> Job_lookup;
+
+	template<class Time>
+	Job_lookup make_job_lookup(const typename Job<Time>::Job_set& jobs)
+	{
+		Job_lookup lookup;
+		for (const auto& j : jobs) {
+			lookup[j.get_id()] = j.get_job_index();
+		}
+		return lookup;
+	}
 }
 
 namespace std {

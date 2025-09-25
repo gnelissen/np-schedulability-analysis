@@ -40,7 +40,7 @@ namespace NP {
 		{
 			processors_initial_state.emplace_back(num_processors, Interval<Time>(0, 0));
 			assert(num_processors > 0);
-			validate_prec_cstrnts<Time>(this->prec, jobs);
+			validate_prec_cstrnts<Time>(this->prec);
 			validate_affinities<Time>(this->jobs, 1);
 		}
 
@@ -51,7 +51,7 @@ namespace NP {
 		, processors_initial_state(proc_init_state)
 		{
 			assert(processors_initial_state.size() > 0);
-			validate_prec_cstrnts<Time>(this->prec, jobs);
+			validate_prec_cstrnts<Time>(this->prec);
 			validate_affinities<Time>(this->jobs, proc_init_state.size());
 		}
 
@@ -65,7 +65,7 @@ namespace NP {
 		{
 			processors_initial_state.emplace_back(num_processors, Interval<Time>(0, 0));
 			assert(num_processors > 0);
-			validate_prec_cstrnts<Time>(this->prec, jobs);
+			validate_prec_cstrnts<Time>(this->prec);
 			validate_abort_refs<Time>(aborts, jobs);
 			validate_affinities<Time>(this->jobs, 1);
 		}
@@ -79,7 +79,7 @@ namespace NP {
 			, processors_initial_state(proc_init_state)
 		{
 			assert(processors_initial_state.size() > 0);
-			validate_prec_cstrnts<Time>(this->prec, jobs);
+			validate_prec_cstrnts<Time>(this->prec);
 			validate_abort_refs<Time>(aborts, jobs);
 			validate_affinities<Time>(this->jobs, proc_init_state.size());
 		}

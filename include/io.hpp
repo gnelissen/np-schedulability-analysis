@@ -122,7 +122,7 @@ namespace NP {
 
 	//Functions that help parse selfsuspending tasks file
 	template<class Time>
-	Precedence_constraint<Time> parse_precedence_constraint(std::istream &in)
+	Precedence_constraint<Time> parse_precedence_constraint(std::istream &in, const Job_lookup& job_lookup)
 	{
 		unsigned long from_tid, from_jid, to_tid, to_jid;
 		Time sus_min=0, sus_max=0;
@@ -150,29 +150,30 @@ namespace NP {
 
 		return Precedence_constraint<Time>{JobID{from_jid, from_tid},
 											JobID{to_jid, to_tid},
-		                          			Interval<Time>{sus_min, sus_max}};
+		                          			Interval<Time>{sus_min, sus_max},
+											job_lookup};
 	}
 
 	template<class Time>
-	std::vector<Precedence_constraint<Time>> parse_precedence_file(std::istream& in)
+	std::unique_ptr<std::vector<Precedence_constraint<Time>>> parse_precedence_file(std::istream& in, const Job_lookup& job_lookup)
 	{
 		// skip column headers
 		next_line(in);
-		std::vector<Precedence_constraint<Time>> cstr;
+		std::unique_ptr<std::vector<Precedence_constraint<Time>>> cstr{ new std::vector<Precedence_constraint<Time>>() };
 
 		// parse all rows
 		while (more_data(in)) {
 			// each row contains one self-suspending constraint
-			cstr.push_back(parse_precedence_constraint<Time>(in));
+			cstr->push_back(parse_precedence_constraint<Time>(in, job_lookup));
 			next_line(in);
 		}
 		return cstr;
 	}
 
 	template<class Time>
-	inline std::vector<Precedence_constraint<Time>> parse_yaml_dag_file(std::istream& in)
+	inline std::unique_ptr<std::vector<Precedence_constraint<Time>>> parse_yaml_dag_file(std::istream& in, const Job_lookup& job_lookup)
 	{
-		std::vector<Precedence_constraint<Time>> edges;
+		std::unique_ptr<std::vector<Precedence_constraint<Time>>> edges{ new std::vector<Precedence_constraint<Time>>() };
 		// Clear any flags
 		in.clear();
 		// Move the pointer to the beginning
@@ -197,12 +198,12 @@ namespace NP {
 							auto tid = succ[0].as<unsigned long>();
 							auto jid = succ[1].as<unsigned long>();
 							auto to = JobID(jid, tid);
-							edges.push_back(Precedence_constraint<Time>(from, to, {0, 0}));
+							edges->push_back(Precedence_constraint<Time>(from, to, {0, 0}, job_lookup));
 						} else {
 							auto tid = succ["Task ID"].as<unsigned long>();
 							auto jid = succ["Job ID"].as<unsigned long>();
 							auto to = JobID(jid, tid);
-							edges.push_back(Precedence_constraint<Time>(from, to, {0, 0}));
+							edges->push_back(Precedence_constraint<Time>(from, to, {0, 0}, job_lookup));
 						}
 					}
 				}
