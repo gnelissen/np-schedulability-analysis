@@ -42,6 +42,7 @@ namespace NP {
 			assert(num_processors > 0);
 			validate_prec_cstrnts<Time>(this->prec);
 			validate_affinities<Time>(this->jobs, 1);
+			validate_jobs<Time>(this->jobs, this->processors_initial_state);
 		}
 
 		Scheduling_problem(const Workload& jobs, const Precedence_constraints& prec,
@@ -53,6 +54,7 @@ namespace NP {
 			assert(processors_initial_state.size() > 0);
 			validate_prec_cstrnts<Time>(this->prec);
 			validate_affinities<Time>(this->jobs, proc_init_state.size());
+			validate_jobs<Time>(this->jobs, this->processors_initial_state);
 		}
 
 		// Constructor with abort actions and precedence constraints
@@ -68,6 +70,7 @@ namespace NP {
 			validate_prec_cstrnts<Time>(this->prec);
 			validate_abort_refs<Time>(aborts, jobs);
 			validate_affinities<Time>(this->jobs, 1);
+			validate_jobs<Time>(this->jobs, this->processors_initial_state);
 		}
 
 		Scheduling_problem(const Workload& jobs, const Precedence_constraints& prec,
@@ -82,6 +85,7 @@ namespace NP {
 			validate_prec_cstrnts<Time>(this->prec);
 			validate_abort_refs<Time>(aborts, jobs);
 			validate_affinities<Time>(this->jobs, proc_init_state.size());
+			validate_jobs<Time>(this->jobs, this->processors_initial_state);
 		}
 
 		// Convenience constructor: no DAG, no abort actions
@@ -92,6 +96,7 @@ namespace NP {
 			processors_initial_state.emplace_back(num_processors, Interval<Time>(0, 0));
 			assert(num_processors > 0);
 			validate_affinities<Time>(this->jobs, 1);
+			validate_jobs<Time>(this->jobs, this->processors_initial_state);
 		}
 
 		Scheduling_problem(const Workload& jobs,
@@ -104,6 +109,7 @@ namespace NP {
 				assert(n > 0);
 			}
 			validate_affinities<Time>(this->jobs, num_processors.size());
+			validate_jobs<Time>(this->jobs, this->processors_initial_state);
 		}
 
 		Scheduling_problem(const Workload& jobs,
@@ -113,6 +119,7 @@ namespace NP {
 		{
 			assert(processors_initial_state.size() > 0);
 			validate_affinities<Time>(this->jobs, proc_init_state.size());
+			validate_jobs<Time>(this->jobs, this->processors_initial_state);
 		}
 	};
 

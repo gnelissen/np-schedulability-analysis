@@ -343,6 +343,56 @@ namespace NP {
 		}
 		return lookup;
 	}
+
+	class InvalidJobParallelism : public std::exception
+	{
+	public:
+		InvalidJobParallelism(const JobID& bad_id)
+			: ref(bad_id)
+		{
+		}
+
+		const JobID ref;
+
+		virtual const char* what() const noexcept override
+		{
+			static std::string msg;
+			msg = "invalid parallelism parameters for job T" + std::to_string(ref.task) + "J" + std::to_string(ref.job);
+			return msg.c_str();
+		}
+
+	};
+
+	class InvalidJobAffinity : public std::exception
+	{
+	public:
+		InvalidJobAffinity(const JobID& bad_id)
+			: ref(bad_id)
+		{
+		}
+		const JobID ref;
+		virtual const char* what() const noexcept override
+		{
+			static std::string msg;
+			msg = "invalid affinity for job T" + std::to_string(ref.task) + "J" + std::to_string(ref.job);
+			return msg.c_str();
+		}
+	};
+
+	template<class Time>
+	void validate_jobs(const typename Job<Time>::Job_set& jobs, const std::vector<std::vector<Interval<Time>>>& proc_initial_states)
+	{
+		for (const auto& j : jobs) {
+			auto affinity = j.get_affinity();
+			if (affinity >= proc_initial_states.size()) {
+				throw InvalidJobAffinity(j.get_id());
+			}
+			auto num_cores = proc_initial_states[affinity].size();
+			if (j.get_min_parallelism() > num_cores || j.get_max_parallelism() < j.get_min_parallelism()) {
+				throw InvalidJobParallelism(j.get_id());
+			}
+		}
+	}
 }
 
 namespace std {
