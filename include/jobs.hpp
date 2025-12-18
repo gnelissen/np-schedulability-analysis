@@ -330,9 +330,14 @@ namespace NP {
 			       // first tie-break by task ID
 			       || (priority == other.priority
 			           && id.task < other.id.task)
-			       // second, tie-break by job ID
+				   // second, tie breaking by order
+				   || (priority == other.priority
+					   && id.task == other.id.task
+					   && get_order() < other.get_order())
+			       // third, tie-break by job ID
 			       || (priority == other.priority
 			           && id.task == other.id.task
+					   && get_order() == other.get_order()
 			           && id.job < other.id.job);
 		}
 
