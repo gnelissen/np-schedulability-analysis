@@ -395,7 +395,6 @@ namespace NP {
 				, num_clusters(cores_initial_state.size())
 				, cores_initial_state(cores_initial_state)
 				, early_exit(early_exit)
-				, nodes_storage(2)
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 				, log(log_opts.log)
 				, logger(log_opts.log_cond)
@@ -405,6 +404,14 @@ namespace NP {
 				, secateur(pruning_cond)
 #endif
 			{
+				// calculate the maximum number of jobs that may be marked as scheduled/incompatible
+				// after a single job dispatch decision
+				unsigned int max_incompatible_jobs = 1;
+				for(const auto &job : jobs) {
+					max_incompatible_jobs = std::max((unsigned int) job.get_incompatible_jobs().size(), max_incompatible_jobs);
+				}
+				// allocate node storage for the maximum number of layer of the SAG that may have to be tracked at the same time
+				nodes_storage.resize(max_incompatible_jobs+1);
 #ifdef CONFIG_PARALLEL
 				// Initialize TBB task arena with specified thread count 
 				if (parallel_enabled) {
@@ -683,7 +690,7 @@ namespace NP {
 									// create a dummy node for explanation purposes
 									auto frange = new_n.finish_range(i) + j.get_cost(pmin);
 									Node_ref next =
-										new_node(1, new_n, j, j.get_job_index(), state_space_data, 0, 0, 0);
+										new_node(j.get_incompatible_jobs().size(), new_n, j, j.get_job_index(), state_space_data, 0, 0, 0);
 									//const CoreAvailability empty_cav = {};
 									State_ref next_s = new_state(*new_n.get_last_state(), j, frange, frange, new_n.get_scheduled_jobs(), new_n.get_jobs_with_pending_successors(), new_n.get_ready_successor_jobs(), state_space_data, new_n.get_next_certain_source_job_release(i), pmin);
 									next->add_state(next_s);
@@ -719,7 +726,7 @@ namespace NP {
 			Time next_certain_job_ready_time(const Node& n, const State& s, const unsigned int cluster_id) const
 			{
 				const auto& cs = s.cluster(cluster_id);
-				Time t_ws = std::min(cs.next_certain_gang_source_job_disptach(), s.next_certain_successor_jobs_disptach(cluster_id));
+				Time t_ws = std::min(cs.next_certain_gang_source_job_dispatch(), s.next_certain_successor_jobs_dispatch(cluster_id));
 				Time t_wos = n.get_next_certain_sequential_source_job_release(cluster_id);
 				return std::min(t_wos, t_ws);
 			}
@@ -732,15 +739,15 @@ namespace NP {
 				const Time t_avail, const unsigned int ncores = 1) const
 			{
 				const auto& cs = s.cluster(j.get_affinity());
-				auto rt = state_space_data.earliest_ready_time(s, j);
-				auto at = cs.core_availability(ncores).min();
-				Time est = std::max(rt, at);
+				auto rt = state_space_data.ready_times(s, j);
+				auto at = cs.core_availability(ncores);
+				Time est = std::max(rt.min(), at.min());
 
 				DM("rt: " << rt << std::endl
 					<< "at: " << at << std::endl);
 
-				Time lst = std::min(t_wc,
-					std::min(t_high, t_avail) - Time_model::constants<Time>::epsilon());
+				Time lst = std::min(std::max(rt.max(), at.max()), std::min(t_wc,
+					std::min(t_high, t_avail) - Time_model::constants<Time>::epsilon()));
 
 				DM("est: " << est << std::endl);
 				DM("lst: " << lst << std::endl);
@@ -839,19 +846,22 @@ namespace NP {
 
 						// If be_naive, a new node and a new state should be created for each new job dispatch.
 						if (be_naive)
-							next = new_node(1, *n, *j, j->get_job_index(), state_space_data, state_space_data.earliest_possible_job_release(*n, *j), state_space_data.earliest_certain_source_job_release(*n, *j), state_space_data.earliest_certain_sequential_source_job_release(*n, *j));
+							next = new_node(j->get_incompatible_jobs().size(), *n, *j, j->get_job_index(), state_space_data, state_space_data.earliest_possible_job_release(*n, *j), state_space_data.earliest_certain_source_job_release(*n, *j), state_space_data.earliest_certain_sequential_source_job_release(*n, *j));
 
 						// if we do not have a pointer to a node with the same set of scheduled job yet,
 						// try to find an existing node with the same set of scheduled jobs. Otherwise, create one.
 						if (next == nullptr)
 						{
-							const auto pair_it = nodes_by_key.find(n->next_key(*j));
+							const auto pair_it = nodes_by_key.find(n->next_key(*j, state_space_data));
 							if (pair_it != nodes_by_key.end()) {
-								Job_set next_scheduled_jobs{ n->get_scheduled_jobs(), j->get_job_index() };
+								Job_set next_scheduled_jobs{ n->get_scheduled_jobs(), j->get_incompatible_jobs() };
 								for (Node_ref other : pair_it->second) {
 									if (other->get_scheduled_jobs() == next_scheduled_jobs)//.matches(n->get_scheduled_jobs(), j->get_job_index()))
 									{
 										next = other;
+										// if `j` has pending successors, add it to the list of jobs with pending successors
+										if (state_space_data.successors_suspensions[j->get_job_index()].size() > 0) 
+											next->add_job_with_pending_succ(*j);
 										DM("=== dispatch: next exists." << std::endl);
 										break;
 									}
@@ -859,7 +869,7 @@ namespace NP {
 							}
 							// If there is no node yet, create one.
 							if (next == nullptr)
-								next = new_node(1, *n, *j, j->get_job_index(), state_space_data, state_space_data.earliest_possible_job_release(*n, *j), state_space_data.earliest_certain_source_job_release(*n, *j), state_space_data.earliest_certain_sequential_source_job_release(*n, *j));
+								next = new_node(j->get_incompatible_jobs().size(), *n, *j, j->get_job_index(), state_space_data, state_space_data.earliest_possible_job_release(*n, *j), state_space_data.earliest_certain_source_job_release(*n, *j), state_space_data.earliest_certain_sequential_source_job_release(*n, *j));
 						}
 
 						// next should always exist at this point, possibly without states in it
@@ -1180,10 +1190,10 @@ namespace NP {
 				
 				int last_num_states = num_states;
 				make_initial_node();
+				// clean up the state cache
+				nodes_by_key.clear();
 
 				while (current_job_count < state_space_data.num_jobs()) {
-					// clean up the state cache
-					nodes_by_key.clear();
 					// get the current exploration front
 					Nodes& exploration_front = nodes();
 #ifdef CONFIG_PARALLEL
@@ -1191,10 +1201,9 @@ namespace NP {
 #else
 					unsigned long n = exploration_front.size();
 #endif
-					if (n == 0)
-					{
-						aborted = true;
-						break;
+					if (n == 0) {
+						current_job_count++;
+						continue;
 					}
 
 					// keep track of exploration front width (main thread only - no protection needed)
@@ -1258,10 +1267,24 @@ namespace NP {
 						check_cpu_timeout();
 						if (aborted)
 							break;
-						// Clean up nodes that are no longer needed
-						release_node(node);
 					}
 #endif
+					if (!be_naive) {
+						// remove nodes in the exploration_front
+						for (auto it = exploration_front.begin(); it != exploration_front.end(); it++) {
+							const auto& node = *it;
+							// remove it from nodes_by_key if it is in the current depth
+							auto pair_it = nodes_by_key.find(node->get_key());
+							if (pair_it != nodes_by_key.end()) {
+								auto& nodes = pair_it->second;
+								nodes.remove(node);
+							}
+						}
+					}
+					// Clean up nodes and states that are no longer needed
+					for (const Node_ref& node : exploration_front) {
+						release_node(node);
+					}
 					nodes().clear();
 					current_job_count++;
 				}

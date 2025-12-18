@@ -31,13 +31,49 @@ namespace NP {
 				set_bit(idx, true);
 			}
 
-			// derive a new set by "cloning" an existing set and adding an index
+			// derive a new set by "cloning" an existing set and adding a set of indices
+			Index_set(const Index_set& from, const std::vector<std::size_t>& indices)
+				: the_set(std::max(from.the_set.size(), ((indices.empty() ? 0 : indices.back()) / 64) + 1))
+			{
+				std::copy(from.the_set.begin(), from.the_set.end(), the_set.begin());
+				for (auto i : indices)
+					set_bit(i, true);
+			}
+
+			Index_set(const Index_set& from, const std::set<std::size_t>& indices)
+				: the_set(std::max(from.the_set.size(), ((indices.empty() ? 0 : *indices.rbegin()) / 64) + 1))
+			{
+				std::copy(from.the_set.begin(), from.the_set.end(), the_set.begin());
+				for (auto i : indices)
+					set_bit(i, true);
+			}
+
+			// update the current set by "cloning" an existing set and adding an index
 			void set(const Index_set& from, std::size_t idx)
 			{
 				the_set.clear();
 				the_set.resize(std::max(from.the_set.size(), (idx / 64) + 1));
 				std::copy(from.the_set.begin(), from.the_set.end(), the_set.begin());
 				set_bit(idx, true);
+			}
+
+			// update the current set by "cloning" an existing set and adding a set of indices
+			void set(const Index_set& from, const std::vector<std::size_t>& indices)
+			{
+				the_set.clear();
+				the_set.resize(std::max(from.the_set.size(), ((indices.empty() ? 0 : indices.back()) / 64) + 1));
+				std::copy(from.the_set.begin(), from.the_set.end(), the_set.begin());
+				for (auto i : indices)
+					set_bit(i, true);
+			}
+
+			void set(const Index_set& from, const std::set<std::size_t>& indices)
+			{
+				the_set.clear();
+				the_set.resize(std::max(from.the_set.size(), ((indices.empty() ? 0 : *indices.rbegin()) / 64) + 1));
+				std::copy(from.the_set.begin(), from.the_set.end(), the_set.begin());
+				for (auto i : indices)
+					set_bit(i, true);
 			}
 
 			// create the diff of two job sets (intended for debugging only)

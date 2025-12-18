@@ -163,9 +163,16 @@ namespace NP {
 					auto pred_idx = pred.first->get_job_index();
 					auto pred_susp = pred.second;
 					Interval<Time> ft{ 0, 0 };
-					s.get_finish_times(pred_idx, ft);
-					r.lower_bound(ft.min() + pred_susp.min());
-					r.extend_to(ft.max() + pred_susp.max());
+					bool has_ft = s.get_finish_times(pred_idx, ft);
+					if (has_ft) {
+						if (j.get_type() == Job<Time>::Job_type::C_JOIN)
+							r.lower_to(ft.min() + pred_susp.min());
+						else
+							r.lower_bound(ft.min() + pred_susp.min());
+						r.extend_to(ft.max() + pred_susp.max());
+					}
+					// only reason a predecessor of `j` may not have a finish time is if it is a conditional join node
+					assert(has_ft || j.get_type() == Job<Time>::Job_type::C_JOIN);
 				}
 				return r;
 			}
@@ -215,7 +222,13 @@ namespace NP {
 					auto pred_idx = pred.first->get_job_index();
 
 					Interval<Time> ft{ 0, 0 };
-					s.get_finish_times(pred_idx, ft);
+					bool has_ft = s.get_finish_times(pred_idx, ft);
+					// if `j_pred` has no finish time, it means j_high must be a conditional join node 
+					// and some of its predecessors are parts of conditional branches that did not execute
+					if (!has_ft) {
+						assert(j_high.get_type() == Job<Time>::Job_type::C_JOIN);
+						continue;
+					}
 
 					// If the suspension is 0 and j_pred is certainly finished when j_low is dispatched, then j_pred cannot postpone
 					// the (latest) ready time of j_high.
@@ -427,10 +440,31 @@ namespace NP {
 				{
 					const Job<Time>& j_high = **it;
 
-					// j_high is not relevant if it is already scheduled or not of higher priority
-					if (j_high.higher_priority_than(reference_job)) {
-						// does it beat what we've already seen?
-						latest_ready_high = std::min(latest_ready_high, conditional_latest_ready_time(n, s, j_high, reference_job.get_job_index(), ncores));
+					// j_high is not relevant if it is not of higher priority
+					// or if it is incompatible with reference_job
+					if (j_high.higher_priority_than(reference_job) && 
+						!reference_job.is_incompatible_with(j_high.get_job_index())) {
+						// if j_high has conditional siblings, we must take the sibling with largest ready time
+						if (j_high.is_conditional_sibling()) {
+							Time read_max = j_high.latest_arrival();
+							// get the job index of the conditional fork from which j_high originates
+							Job_index pred = j_high.get_conditional_predecessor();
+							// look at all conditional siblings
+							for (const auto& sibling : successors_suspensions[pred]) {
+								if (sibling.first->higher_priority_than(reference_job)) {
+									read_max = std::max(read_max, conditional_latest_ready_time(n, s, *(sibling.first), reference_job.get_job_index(), ncores));
+								}
+								else { 
+									// if at least one of the siblings has a lower priority than the reference_job than there is a scenario 
+									// where none of the siblings may prevent reference_job to execute due to the FP scheduling rule  
+									read_max = Time_model::constants<Time>::infinity();
+									break;
+								}
+							}
+							latest_ready_high = std::min(latest_ready_high, read_max);
+						}
+						else
+							latest_ready_high = std::min(latest_ready_high, conditional_latest_ready_time(n, s, j_high, reference_job.get_job_index(), ncores));
 						if (latest_ready_high <= ready_min) break;
 					}
 				}

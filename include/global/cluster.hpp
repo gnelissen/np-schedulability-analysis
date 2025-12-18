@@ -47,7 +47,7 @@ namespace NP {
 
 			// keeps track of the earliest time a gang source job (a job with no predecessor that requires more than one core to execute) 
 			// is certainly arrived and certainly has enough free cores to start executing
-			Time earliest_certain_gang_source_job_disptach;
+			Time earliest_certain_gang_source_job_dispatch;
 
 			struct Running_job {
 				Job_index idx;
@@ -71,19 +71,19 @@ namespace NP {
 		public:
 
 			// initial state -- nothing yet has finished, nothing is running
-			Cluster_state(const unsigned int id, const unsigned int num_processors, const Time earliest_certain_gang_source_job_disptach)
+			Cluster_state(const unsigned int id, const unsigned int num_processors, const Time earliest_certain_gang_source_job_dispatch)
 				: core_avail{ num_processors, Interval<Time>(Time(0), Time(0)) }
 				, certain_jobs{}
-				, earliest_certain_gang_source_job_disptach{ earliest_certain_gang_source_job_disptach }
+				, earliest_certain_gang_source_job_dispatch{ earliest_certain_gang_source_job_dispatch }
 				, cluster_id{id}
 			{
 				assert(core_avail.size() > 0);
 			}
 			// initial state with given core availability
-			Cluster_state(const unsigned int id, const std::vector<Interval<Time>>& proc_initial_state, const Time earliest_certain_gang_source_job_disptach)
+			Cluster_state(const unsigned int id, const std::vector<Interval<Time>>& proc_initial_state, const Time earliest_certain_gang_source_job_dispatch)
 				: core_avail{ proc_initial_state.size() }
 				, certain_jobs{}
-				, earliest_certain_gang_source_job_disptach{ earliest_certain_gang_source_job_disptach }
+				, earliest_certain_gang_source_job_dispatch{ earliest_certain_gang_source_job_dispatch }
 				, cluster_id{id}
 			{
 				assert(core_avail.size() > 0);
@@ -102,10 +102,10 @@ namespace NP {
 				}
 			}
 
-			Cluster_state(const std::vector<Running_job>& certain_jobs, const Core_availability& core_avail, const Time earliest_certain_gang_source_job_disptach, const unsigned int cluster_id)
+			Cluster_state(const std::vector<Running_job>& certain_jobs, const Core_availability& core_avail, const Time earliest_certain_gang_source_job_dispatch, const unsigned int cluster_id)
 				: certain_jobs(std::move(certain_jobs))
 				, core_avail(std::move(core_avail))
-				, earliest_certain_gang_source_job_disptach(earliest_certain_gang_source_job_disptach)
+				, earliest_certain_gang_source_job_dispatch(earliest_certain_gang_source_job_dispatch)
 				, cluster_id(cluster_id)
 			{
 			}
@@ -133,33 +133,33 @@ namespace NP {
 				assert(core_avail.size() > 0);
 
 				// NOTE: must be done after the core availabilities have been updated
-				update_earliest_certain_gang_source_job_disptach(next_source_job_rel, scheduled_jobs, state_space_data);
+				update_earliest_certain_gang_source_job_dispatch(next_source_job_rel, scheduled_jobs, state_space_data);
 			}
 
 			// copy constructor
 			Cluster_state(const Cluster_state& origin)
 				: certain_jobs(origin.certain_jobs)
 				, core_avail(origin.core_avail)
-				, earliest_certain_gang_source_job_disptach(origin.earliest_certain_gang_source_job_disptach)
+				, earliest_certain_gang_source_job_dispatch(origin.earliest_certain_gang_source_job_dispatch)
 				, cluster_id(origin.cluster_id)
 			{
 			}
 
 			// initial state -- nothing yet has finished, nothing is running
-			void reset(const unsigned int id, const unsigned int num_processors, const Time earliest_certain_gang_source_job_disptach)
+			void reset(const unsigned int id, const unsigned int num_processors, const Time earliest_certain_gang_source_job_dispatch)
 			{
 				clear();
 				core_avail = Core_availability( num_processors, Interval<Time>(Time(0), Time(0)) );
-				this->earliest_certain_gang_source_job_disptach = earliest_certain_gang_source_job_disptach;
+				this->earliest_certain_gang_source_job_dispatch = earliest_certain_gang_source_job_dispatch;
 				cluster_id = id;
 				assert(core_avail.size() > 0);
 			}
 			// initial state with given core availability
-			void reset(const unsigned int id, const std::vector<Interval<Time>>& proc_initial_state, const Time earliest_certain_gang_source_job_disptach)
+			void reset(const unsigned int id, const std::vector<Interval<Time>>& proc_initial_state, const Time earliest_certain_gang_source_job_dispatch)
 			{
 				assert(core_avail.size() == proc_initial_state.size());
 				clear();
-				this->earliest_certain_gang_source_job_disptach = earliest_certain_gang_source_job_disptach;
+				this->earliest_certain_gang_source_job_dispatch = earliest_certain_gang_source_job_dispatch;
 				cluster_id = id;
 
 				std::vector<Time> amin, amax;
@@ -176,11 +176,11 @@ namespace NP {
 				}
 			}
 
-			void reset(const std::vector<Running_job>& certain_jobs, const Core_availability& core_avail, const Time earliest_certain_gang_source_job_disptach, const unsigned int cluster_id)
+			void reset(const std::vector<Running_job>& certain_jobs, const Core_availability& core_avail, const Time earliest_certain_gang_source_job_dispatch, const unsigned int cluster_id)
 			{
 				this->certain_jobs = std::move(certain_jobs);
 				this->core_avail = std::move(core_avail);
-				this->earliest_certain_gang_source_job_disptach = earliest_certain_gang_source_job_disptach;
+				this->earliest_certain_gang_source_job_dispatch = earliest_certain_gang_source_job_dispatch;
 				this->cluster_id = cluster_id;
 			}
 
@@ -209,7 +209,7 @@ namespace NP {
 				assert(core_avail.size() > 0);
 
 				// NOTE: must be done after the core availabilities have been updated
-				update_earliest_certain_gang_source_job_disptach(next_source_job_rel, scheduled_jobs, state_space_data);
+				update_earliest_certain_gang_source_job_dispatch(next_source_job_rel, scheduled_jobs, state_space_data);
 			}
 
 			void clear() 
@@ -256,9 +256,9 @@ namespace NP {
 				return core_avail[0].min();
 			}
 
-			Time next_certain_gang_source_job_disptach() const
+			Time next_certain_gang_source_job_dispatch() const
 			{
-				return earliest_certain_gang_source_job_disptach;
+				return earliest_certain_gang_source_job_dispatch;
 			}
 
 			const std::vector<Running_job>& get_cert_running_jobs() const
@@ -373,7 +373,7 @@ namespace NP {
 				return acquire_cluster<Time>(
 					new_cj,
 					new_core_avail,
-					earliest_certain_gang_source_job_disptach,
+					earliest_certain_gang_source_job_dispatch,
 					cluster_id);
 			}
 
@@ -565,18 +565,18 @@ namespace NP {
 
 			// finds the earliest time a gang source job (i.e., a job without predecessors that requires more than one core to start executing)
 			// is certainly released and has enough cores available to start executing at or after time `after`
-			void update_earliest_certain_gang_source_job_disptach(
+			void update_earliest_certain_gang_source_job_dispatch(
 				Time after,
 				const Job_set& scheduled_jobs,
 				const State_space_data<Time>& state_space_data)
 			{
-				earliest_certain_gang_source_job_disptach = Time_model::constants<Time>::infinity();
+				earliest_certain_gang_source_job_dispatch = Time_model::constants<Time>::infinity();
 
 				for (auto it = state_space_data.gang_source_jobs_by_latest_arrival_by_cluster[cluster_id].lower_bound(after);
 					it != state_space_data.gang_source_jobs_by_latest_arrival_by_cluster[cluster_id].end(); it++)
 				{
 					Job_ref jp = it->second;
-					if (jp->latest_arrival() >= earliest_certain_gang_source_job_disptach)
+					if (jp->latest_arrival() >= earliest_certain_gang_source_job_dispatch)
 						break;
 
 					// skip if the job was dispatched already
@@ -584,7 +584,7 @@ namespace NP {
 						continue;
 
 					// it's incomplete and not ignored
-					earliest_certain_gang_source_job_disptach = std::min(earliest_certain_gang_source_job_disptach,
+					earliest_certain_gang_source_job_dispatch = std::min(earliest_certain_gang_source_job_dispatch,
 						std::max(jp->latest_arrival(),
 							core_availability(jp->get_min_parallelism()).max()));
 				}

@@ -67,6 +67,12 @@ namespace NP {
 		template<class T>
 		void release_node(const std::shared_ptr<Schedule_node<T>>& node)
 		{
+			// release all states held by the node
+			auto states = node->get_states();
+			for (auto s = states.begin(); s != states.end(); s++ ) {
+				release_state(*s); 
+			}
+			// release the node itself
 			node_pool<T>.release(node);
 		}
 

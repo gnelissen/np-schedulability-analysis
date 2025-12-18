@@ -7,6 +7,7 @@
 #include <algorithm> // for find
 #include <functional> // for hash
 #include <exception>
+#include <set>
 
 #include "robin_hood.h"
 #include "time.hpp"
@@ -45,6 +46,12 @@ namespace NP {
 		typedef std::vector<Job<Time>> Job_set;
 		typedef Time Priority; // Make it a time value to support EDF
 		typedef std::map<unsigned int, Interval<Time>> Cost;
+		// for conditional DAGs (i.e., normal, conditional fork or condition join
+		enum Job_type {
+			NORMAL,
+			C_FORK,
+			C_JOIN
+		};
 
 	private:
 		Interval<Time> arrival;
@@ -56,7 +63,17 @@ namespace NP {
 		JobID id;
 		unsigned int affinity; // which cluster of processors this job is pinned to
 		hash_value_t key;
-		Job_index index;  // RV: index in the jobs array of the workload.
+		Job_index index;  // index in the jobs array of the workload.
+		// set of jobs that are mutually exclusive with this job execution in a conditional DAG
+		std::set<Job_index> incompatible_jobs;
+		// Type of job in a conditional DAG
+		enum Job_type type;
+		// for conditional jobs: is this job a conditional sibling?
+		bool conditional_sibling = false;
+		// for conditional jobs: index of the conditional predecessor job
+		Job_index conditional_predecessor = 0;
+		// order of the job in a topological sorting of the c-dag
+		std::size_t order = 0;
 
 		void compute_hash() {
 			auto h = robin_hood::hash<size_t>{};
@@ -79,9 +96,10 @@ namespace NP {
 			Time dl, Priority prio,
 			Job_index idx,
 			unsigned int affinity = 0,
-			unsigned long tid = 0)
+			unsigned long tid = 0,
+			Job_type type = Job_type::NORMAL)
 		: arrival(arr), exec_time(costs), parallelism(costs.begin()->first, costs.rbegin()->first),
-		  deadline(dl), priority(prio), id(id, tid), index(idx), affinity(affinity)
+		  deadline(dl), priority(prio), id(id, tid), index(idx), affinity(affinity), type(type)
 		{
 			compute_hash();
 			if (exec_time.empty()) {
@@ -92,6 +110,8 @@ namespace NP {
 			for (const auto& cost : costs) {
 				bcet = std::min(bcet, cost.second.min());
 			}
+			// add job itself to the incompatible jobs set
+			incompatible_jobs.insert(idx); 
 		}
 
 		Job(unsigned long id,
@@ -99,12 +119,15 @@ namespace NP {
 			Time dl, Priority prio,
 			Job_index idx,
 			unsigned int affinity = 0,
-			unsigned long tid = 0)
+			unsigned long tid = 0,
+			Job_type type = Job_type::NORMAL)
 			: arrival(arr), parallelism(Interval<unsigned int>{ 1, 1 }),
-			deadline(dl), priority(prio), id(id, tid), index(idx), affinity(affinity)
+			deadline(dl), priority(prio), id(id, tid), index(idx), affinity(affinity), type(type)
 		{
 			exec_time.emplace(1, cost);
 			bcet = cost.min();
+			// add job itself to the incompatible jobs set
+			incompatible_jobs.insert(idx); 
 			compute_hash();
 		}
 
@@ -152,7 +175,6 @@ namespace NP {
 		{
 			return bcet;
 		}
-
 
 		// return the execution time bounds for a given level of parallelism
 		Interval<Time> get_cost(unsigned int ncores = 1) const
@@ -212,6 +234,64 @@ namespace NP {
 			return t > deadline
 			       && (t - deadline) >
 			          Time_model::constants<Time>::deadline_miss_tolerance();
+		}
+
+		Job_type get_type() const {
+			return type;
+		}
+
+		void add_incompatible_job(Job_index j) {
+			incompatible_jobs.emplace(j);
+		}
+
+		void remove_incompatible_job(Job_index j) {
+			incompatible_jobs.erase(j);
+		}
+
+		void remove_incompatible_jobs() {
+			// remove all the jobs except the job itself
+			incompatible_jobs.clear();
+			incompatible_jobs.insert(index);
+		}
+
+		bool is_incompatible_with(Job_index j) const {
+			return incompatible_jobs.find(j) != incompatible_jobs.end();
+		}
+
+		const std::set<Job_index>& get_incompatible_jobs() const {
+			return incompatible_jobs;
+		}
+
+		// a function for returning the incompatible jobs of a job without the job itself
+		// only for use in find_incompatible_jobs function
+		std::set<Job_index> get_incompatible_jobs_without_itself() const {
+			std::set<Job_index> incomp_jobs = incompatible_jobs;
+			incomp_jobs.erase(index);
+			return incomp_jobs;
+		}
+
+		void set_order(std::size_t o) {
+			order = o;
+		}
+
+		std::size_t get_order() const {
+			return order;
+		}
+
+		bool is_conditional_sibling() const {
+			return conditional_sibling;
+		}
+
+		void set_conditional_sibling(bool is_conditional) {
+			conditional_sibling = is_conditional;
+		}
+
+		void set_conditional_predecessor(Job_index pred) {
+			conditional_predecessor = pred;
+		}
+
+		Job_index get_conditional_predecessor() const {
+			return conditional_predecessor;
 		}
 
 		JobID get_id() const

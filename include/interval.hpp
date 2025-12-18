@@ -170,6 +170,11 @@ template<class T> class Interval {
 		a = std::max(lb, a);
 	}
 
+	void lower_to(T a_no_later_than)
+	{
+		a = std::min(a_no_later_than, a);
+	}
+
 	void extend_to(T b_at_least)
 	{
 		b = std::max(b_at_least, b);

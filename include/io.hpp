@@ -3,6 +3,10 @@
 
 #include <iostream>
 #include <utility>
+#include <map>
+#include <set>
+#include <vector>
+#include <deque>
 
 #include "interval.hpp"
 #include "time.hpp"
@@ -225,6 +229,8 @@ namespace NP {
 		Time arr_min, arr_max, dl, prio;
 		std::map<unsigned int, Interval<Time>> cost;
 		unsigned int affinity = 0;
+		// job type from job class
+		enum Job<Time>::Job_type type;
 
 		in.exceptions(std::istream::failbit | std::istream::badbit);
 
@@ -245,12 +251,23 @@ namespace NP {
 		if (more_fields_in_line(in))
 		{
 			in >> affinity;
+			next_field(in);
+		}
+		if (more_fields_in_line(in))
+		{
+			// read the job type
+			int job_type;
+			in >> job_type;
+			type = static_cast<typename Job<Time>::Job_type>(job_type);
+		}
+		else {
+			type = Job<Time>::Job_type::NORMAL;
 		}
 
 		in.exceptions(state_before);
 
 		return Job<Time> {jid, Interval<Time>{arr_min, arr_max},
-						cost, dl, prio, idx, affinity, tid};
+						cost, dl, prio, idx, affinity, tid, type};
 	}
 
 	template<class Time>

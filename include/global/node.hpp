@@ -40,10 +40,10 @@ namespace NP {
 			typedef std::vector<Susp_list> Predecessors;
 
 			std::vector<Time> earliest_pending_release;
-			std::vector<Time> next_certain_successor_jobs_disptach;
+			std::vector<Time> next_certain_successor_jobs_dispatch;
 			std::vector<Time> next_certain_source_job_release;
 			std::vector<Time> next_certain_sequential_source_job_release;
-			std::vector<Time> next_certain_gang_source_job_disptach;
+			std::vector<Time> next_certain_gang_source_job_dispatch;
 
 			Job_set scheduled_jobs;
 			// set of jobs that have all their predecessors completed and were not dispatched yet
@@ -83,10 +83,10 @@ namespace NP {
 				, a_max(1, 0)
 				, num_jobs_scheduled(0)
 				, earliest_pending_release(1, 0)
-				, next_certain_successor_jobs_disptach(1, Time_model::constants<Time>::infinity())
+				, next_certain_successor_jobs_dispatch(1, Time_model::constants<Time>::infinity())
 				, next_certain_source_job_release(1, Time_model::constants<Time>::infinity())
 				, next_certain_sequential_source_job_release(1, Time_model::constants<Time>::infinity())
-				, next_certain_gang_source_job_disptach(1, Time_model::constants<Time>::infinity())
+				, next_certain_gang_source_job_dispatch(1, Time_model::constants<Time>::infinity())
 				, ready_successor_jobs(1)
 				, locally_ready_successor_jobs(1)
             {
@@ -102,10 +102,10 @@ namespace NP {
 				, a_max(num_cores.size(), 0)
 				, num_jobs_scheduled(0)
 				, earliest_pending_release(num_cores.size(), 0)
-				, next_certain_successor_jobs_disptach(num_cores.size(), Time_model::constants<Time>::infinity())
+				, next_certain_successor_jobs_dispatch(num_cores.size(), Time_model::constants<Time>::infinity())
 				, next_certain_source_job_release(num_cores.size(), Time_model::constants<Time>::infinity())
 				, next_certain_sequential_source_job_release(num_cores.size(), Time_model::constants<Time>::infinity())
-				, next_certain_gang_source_job_disptach(num_cores.size(), Time_model::constants<Time>::infinity())
+				, next_certain_gang_source_job_dispatch(num_cores.size(), Time_model::constants<Time>::infinity())
 				, ready_successor_jobs(num_cores.size())
 				, locally_ready_successor_jobs(num_cores.size())
             {
@@ -120,13 +120,13 @@ namespace NP {
 				, finish_time(num_cores.size(), { 0,0 })
 				, a_max(num_cores.size(), 0)
 				, num_jobs_scheduled(0)
-				, next_certain_successor_jobs_disptach(num_cores.size(), Time_model::constants<Time>::infinity())
+				, next_certain_successor_jobs_dispatch(num_cores.size(), Time_model::constants<Time>::infinity())
 				, ready_successor_jobs(num_cores.size())
 				, locally_ready_successor_jobs(state_space_data.get_locally_ready_jobs())
 			{
 				next_certain_source_job_release.reserve(num_clusters);
 				next_certain_sequential_source_job_release.reserve(num_clusters);
-				next_certain_gang_source_job_disptach.reserve(num_clusters);
+				next_certain_gang_source_job_dispatch.reserve(num_clusters);
 				earliest_pending_release.reserve(num_clusters);
 				for (int i = 0; i < num_clusters; i++)
 				{
@@ -136,7 +136,7 @@ namespace NP {
 					next_certain_sequential_source_job_release.push_back(seq_rel);
 
 					Time gang_rel = state_space_data.get_earliest_certain_gang_source_job_release(i);
-					next_certain_gang_source_job_disptach.push_back(gang_rel);
+					next_certain_gang_source_job_dispatch.push_back(gang_rel);
 
 					next_certain_source_job_release.push_back(std::min(seq_rel, gang_rel));
                 }
@@ -149,14 +149,14 @@ namespace NP {
 				, finish_time(proc_initial_state.size(), { 0,0 })
 				, a_max(proc_initial_state.size(), Time_model::constants<Time>::infinity())
 				, num_jobs_scheduled(0)
-				, next_certain_successor_jobs_disptach(proc_initial_state.size(),Time_model::constants<Time>::infinity())
+				, next_certain_successor_jobs_dispatch(proc_initial_state.size(),Time_model::constants<Time>::infinity())
 				, num_cpus(proc_initial_state.size())
 				, ready_successor_jobs(proc_initial_state.size())
 				, locally_ready_successor_jobs(state_space_data.get_locally_ready_jobs())
 			{
                 next_certain_source_job_release.reserve(num_clusters);
 				next_certain_sequential_source_job_release.reserve(num_clusters);
-				next_certain_gang_source_job_disptach.reserve(num_clusters);
+				next_certain_gang_source_job_dispatch.reserve(num_clusters);
 				earliest_pending_release.reserve(num_clusters);
 				for (int i = 0; i < num_clusters; i++)
 				{
@@ -166,7 +166,7 @@ namespace NP {
 					next_certain_sequential_source_job_release.push_back(seq_rel);
 
 					Time gang_rel = state_space_data.get_earliest_certain_gang_source_job_release(i);
-					next_certain_gang_source_job_disptach.push_back(gang_rel);
+					next_certain_gang_source_job_dispatch.push_back(gang_rel);
 
 					next_certain_source_job_release.push_back(std::min(seq_rel, gang_rel));
 
@@ -175,14 +175,15 @@ namespace NP {
 
 				for (int i = 0; i < num_clusters; i++) {
 					Time a_min = Time_model::constants<Time>::infinity();
+					Time first_core_a_max = Time_model::constants<Time>::infinity();
                     for (const auto& a : proc_initial_state[i]) {
-                        a_max[i] = std::min(a_max[i], a.max());
+                        a_max[i] = std::max(a_max[i], a.max());
                         a_min = std::min(a_min, a.min());
+						first_core_a_max = std::min(first_core_a_max, a.max());
                     }
-                    finish_time[i] = {a_min, a_max[i]};
+                    finish_time[i] = {a_min, first_core_a_max};
                 }
 			}
-
 
 			// transition: new node by scheduling a job 'j' in an existing node 'from'
 			Schedule_node(
@@ -194,20 +195,20 @@ namespace NP {
 				const Time next_certain_source_job_release, // the next time a job without predecessor is certainly released
 				const Time next_certain_sequential_source_job_release // the next time a job without predecessor that can execute on a single core is certainly released
 			)
-				: scheduled_jobs{ from.scheduled_jobs, idx }
-				, lookup_key{ from.next_key(j) }
+				: scheduled_jobs{ from.scheduled_jobs, j.get_incompatible_jobs() }
+				, lookup_key{ from.next_key(j, state_space_data) }
 				, num_clusters(from.num_clusters)
 				, num_cpus(from.num_cpus)
-				, num_jobs_scheduled(from.num_jobs_scheduled + 1)
+				, num_jobs_scheduled(from.num_jobs_scheduled + j.get_incompatible_jobs().size())
 				, finish_time(from.num_clusters, { 0, Time_model::constants<Time>::infinity() })
 				, a_max(from.num_clusters, Time_model::constants<Time>::infinity())
 				, earliest_pending_release{ from.earliest_pending_release }
 				, ready_successor_jobs(from.num_clusters)
 				, locally_ready_successor_jobs(from.num_clusters)
 				, next_certain_source_job_release{ from.next_certain_source_job_release }
-				, next_certain_successor_jobs_disptach(from.num_clusters, Time_model::constants<Time>::infinity())
+				, next_certain_successor_jobs_dispatch(from.num_clusters, Time_model::constants<Time>::infinity())
 				, next_certain_sequential_source_job_release{ from.next_certain_sequential_source_job_release }
-				, next_certain_gang_source_job_disptach(from.num_clusters, Time_model::constants<Time>::infinity())
+				, next_certain_gang_source_job_dispatch(from.num_clusters, Time_model::constants<Time>::infinity())
 			{
 				earliest_pending_release[j.get_affinity()] = next_earliest_release;
 				this->next_certain_source_job_release[j.get_affinity()] = next_certain_source_job_release;
@@ -233,10 +234,10 @@ namespace NP {
 				num_cpus = num_cores;
 				a_max = std::vector<Time>(num_clusters, 0);
 				finish_time = std::vector<Interval<Time>>(num_clusters, { 0, 0 });
-				next_certain_successor_jobs_disptach = std::vector<Time>(num_clusters, Time_model::constants<Time>::infinity());
+				next_certain_successor_jobs_dispatch = std::vector<Time>(num_clusters, Time_model::constants<Time>::infinity());
 				next_certain_source_job_release.resize(num_clusters);
 				next_certain_sequential_source_job_release.resize(num_clusters);
-				next_certain_gang_source_job_disptach.resize(num_clusters);
+				next_certain_gang_source_job_dispatch.resize(num_clusters);
 				earliest_pending_release.resize(num_clusters);
 				ready_successor_jobs.resize(num_clusters);
 				locally_ready_successor_jobs = state_space_data.get_locally_ready_jobs();
@@ -248,7 +249,7 @@ namespace NP {
 					next_certain_sequential_source_job_release[i] = seq_rel;
 
 					Time gang_rel = state_space_data.get_earliest_certain_gang_source_job_release(i);
-					next_certain_gang_source_job_disptach[i] = gang_rel;
+					next_certain_gang_source_job_dispatch[i] = gang_rel;
 
 					next_certain_source_job_release[i] = std::min(seq_rel, gang_rel);
 
@@ -267,22 +268,24 @@ namespace NP {
 				num_jobs_scheduled = 0;
 				lookup_key = 0;
 				num_clusters = proc_initial_state.size();
-				next_certain_successor_jobs_disptach = std::vector<Time>(num_clusters, Time_model::constants<Time>::infinity());
+				next_certain_successor_jobs_dispatch = std::vector<Time>(num_clusters, Time_model::constants<Time>::infinity());
 				
 				a_max = std::vector<Time>(num_clusters, Time_model::constants<Time>::infinity());
 				finish_time.resize(num_clusters);				
 				for (int i = 0; i < num_clusters; i++) {
 					Time a_min = Time_model::constants<Time>::infinity();
+					Time first_core_a_max = Time_model::constants<Time>::infinity();
 					for (const auto& a : proc_initial_state[i]) {
-						a_max[i] = std::min(a_max[i], a.max());
+						a_max[i] = std::max(a_max[i], a.max());
 						a_min = std::min(a_min, a.min());
+						first_core_a_max = std::min(first_core_a_max, a.max());
 					}
-					finish_time[i]={a_min, a_max[i]};
+					finish_time[i]={a_min, first_core_a_max};
 				}
 				
 				next_certain_source_job_release.resize(num_clusters);
 				next_certain_sequential_source_job_release.resize(num_clusters);
-				next_certain_gang_source_job_disptach.resize(num_clusters);
+				next_certain_gang_source_job_dispatch.resize(num_clusters);
 				earliest_pending_release.resize(num_clusters);
 				ready_successor_jobs.resize(num_clusters);
 				locally_ready_successor_jobs = state_space_data.get_locally_ready_jobs();
@@ -295,7 +298,7 @@ namespace NP {
 					next_certain_sequential_source_job_release[i] = seq_rel;
 
 					Time gang_rel = state_space_data.get_earliest_certain_gang_source_job_release(i);
-					next_certain_gang_source_job_disptach[i] = gang_rel;
+					next_certain_gang_source_job_dispatch[i] = gang_rel;
 
 					next_certain_source_job_release[i] = std::min(seq_rel, gang_rel);
 
@@ -324,14 +327,14 @@ namespace NP {
 				assert(num_cpus == from.num_cpus);
 				assert(finish_time.size() == from.finish_time.size());
 				assert(a_max.size() == from.a_max.size());
-				assert(next_certain_successor_jobs_disptach.size() == from.next_certain_successor_jobs_disptach.size());
-				assert(next_certain_gang_source_job_disptach.size() == from.next_certain_gang_source_job_disptach.size());
+				assert(next_certain_successor_jobs_dispatch.size() == from.next_certain_successor_jobs_dispatch.size());
+				assert(next_certain_gang_source_job_dispatch.size() == from.next_certain_gang_source_job_dispatch.size());
 				clear();
-				scheduled_jobs.set(from.scheduled_jobs, idx);
-				lookup_key = from.next_key(j);
+				scheduled_jobs.set(from.scheduled_jobs, j.get_incompatible_jobs());
+				lookup_key = from.next_key(j, state_space_data);
 				//num_clusters = from.num_clusters;
 				//num_cpus = from.num_cpus;
-				num_jobs_scheduled = from.num_jobs_scheduled + 1;
+				num_jobs_scheduled = from.num_jobs_scheduled + j.get_incompatible_jobs().size();
 				//finish_time = std::vector<Interval<Time>>(from.num_clusters, { 0, Time_model::constants<Time>::infinity() });
 				std::fill(finish_time.begin(), finish_time.end(), Interval<Time>{0, Time_model::constants<Time>::infinity()});
 				//a_max = std::vector<Time>(num_clusters, Time_model::constants<Time>::infinity());
@@ -340,12 +343,12 @@ namespace NP {
 				earliest_pending_release[j.get_affinity()] = next_earliest_release;
 				this->next_certain_source_job_release = from.next_certain_source_job_release;
 				this->next_certain_source_job_release[j.get_affinity()] = next_certain_source_job_release;
-				//next_certain_successor_jobs_disptach = std::vector<Time>(num_clusters, Time_model::constants<Time>::infinity());
-				std::fill(next_certain_successor_jobs_disptach.begin(), next_certain_successor_jobs_disptach.end(), Time_model::constants<Time>::infinity());
+				//next_certain_successor_jobs_dispatch = std::vector<Time>(num_clusters, Time_model::constants<Time>::infinity());
+				std::fill(next_certain_successor_jobs_dispatch.begin(), next_certain_successor_jobs_dispatch.end(), Time_model::constants<Time>::infinity());
 				this->next_certain_sequential_source_job_release = from.next_certain_sequential_source_job_release;
 				this->next_certain_sequential_source_job_release[j.get_affinity()] = next_certain_sequential_source_job_release;
-				//next_certain_gang_source_job_disptach = std::vector<Time>(num_clusters, Time_model::constants<Time>::infinity());
-				std::fill(next_certain_gang_source_job_disptach.begin(), next_certain_gang_source_job_disptach.end(), Time_model::constants<Time>::infinity());
+				//next_certain_gang_source_job_dispatch = std::vector<Time>(num_clusters, Time_model::constants<Time>::infinity());
+				std::fill(next_certain_gang_source_job_dispatch.begin(), next_certain_gang_source_job_dispatch.end(), Time_model::constants<Time>::infinity());
 
 				update_ready_successors(from, j, state_space_data.successors_suspensions, state_space_data.predecessors_suspensions, this->scheduled_jobs);
 				update_jobs_with_pending_succ(from, j, state_space_data.successors_suspensions, state_space_data.predecessors_suspensions, this->scheduled_jobs);
@@ -386,9 +389,9 @@ namespace NP {
 
 			Time next_certain_job_ready_time(const unsigned int cluster) const
 			{
-				return std::min(next_certain_successor_jobs_disptach[cluster],
+				return std::min(next_certain_successor_jobs_dispatch[cluster],
 					std::min(next_certain_sequential_source_job_release[cluster],
-						next_certain_gang_source_job_disptach[cluster]));
+						next_certain_gang_source_job_dispatch[cluster]));
 			}
 
 			const std::vector<std::vector<Job_ref>>& get_ready_successor_jobs() const
@@ -474,9 +477,15 @@ namespace NP {
 				return lookup_key;
 			}
 
-			hash_value_t next_key(const Job<Time>& j) const
+			hash_value_t next_key(const Job<Time>& j, const State_space_data<Time>& sp_data) const
 			{
-				return get_key() ^ j.get_key();
+				hash_value_t new_key = lookup_key;
+				const auto& jobs = sp_data.jobs;
+				for (Job_index idx : j.get_incompatible_jobs()) {
+					assert(job_not_dispatched(idx));
+					new_key ^= jobs[idx].get_key();
+				}
+				return new_key;
 			}
 
 			//  finish_range / finish_time contains information about the
@@ -507,6 +516,20 @@ namespace NP {
 #endif
 				update_internal_variables(s);
 				states.push_back(s);
+			}
+
+			// add a job to the list of jobs with pending successors
+			void add_job_with_pending_succ(const Job<Time>& j)
+			{
+				// insert the job in the list of jobs with pending successors in sorted order of their indices
+				Job_index j_idx = j.get_job_index();
+				auto it = std::find_if(jobs_with_pending_succ.begin(), jobs_with_pending_succ.end(), [j_idx](const Job<Time>* a) { return a->get_job_index() >= j_idx; });
+				if (it == jobs_with_pending_succ.end())
+					jobs_with_pending_succ.push_back(&j);
+				else if (*it != &j) // if the job is not already in the list of jobs with pending successors
+					// insert the job at the right position in the list of jobs with pending successors
+					// to keep the list sorted
+					jobs_with_pending_succ.insert(it, &j);
 			}
 
 			// export the node information to the stream
@@ -627,8 +650,8 @@ namespace NP {
                                 finish_time[i].widen(s.cluster(i).core_availability());
                                 a_max[i] = std::max(a_max[i], s.cluster(i).core_availability(num_cpus[i]).max());
                                 //update the certain next job ready time
-                                next_certain_successor_jobs_disptach[i] = std::max(next_certain_successor_jobs_disptach[i], s.next_certain_successor_jobs_disptach(i));
-                                next_certain_gang_source_job_disptach[i] = std::max(next_certain_gang_source_job_disptach[i], s.cluster(i).next_certain_gang_source_job_disptach());
+                                next_certain_successor_jobs_dispatch[i] = std::max(next_certain_successor_jobs_dispatch[i], s.next_certain_successor_jobs_dispatch(i));
+                                next_certain_gang_source_job_dispatch[i] = std::max(next_certain_gang_source_job_dispatch[i], s.cluster(i).next_certain_gang_source_job_dispatch());
                             }
 							result = true;
 
@@ -672,16 +695,16 @@ namespace NP {
                     for(int i=0; i<num_clusters; i++) {
                         finish_time[i] = s->cluster(i).core_availability();
                         a_max[i] = s->cluster(i).core_availability(num_cpus[i]).max();
-                        next_certain_successor_jobs_disptach[i] = s->next_certain_successor_jobs_disptach(i);
-                        next_certain_gang_source_job_disptach[i] = s->cluster(i).next_certain_gang_source_job_disptach();
+                        next_certain_successor_jobs_dispatch[i] = s->next_certain_successor_jobs_dispatch(i);
+                        next_certain_gang_source_job_dispatch[i] = s->cluster(i).next_certain_gang_source_job_dispatch();
                     }
 				}
 				else {
                     for(int i=0; i<num_clusters; i++) {
                         finish_time[i].widen(s->cluster(i).core_availability());
                         a_max[i] = std::max(a_max[i], s->cluster(i).core_availability(num_cpus[i]).max());
-                        next_certain_successor_jobs_disptach[i] = std::max(next_certain_successor_jobs_disptach[i], s->next_certain_successor_jobs_disptach(i));
-                        next_certain_gang_source_job_disptach[i] = std::max(next_certain_gang_source_job_disptach[i], s->cluster(i).next_certain_gang_source_job_disptach());
+                        next_certain_successor_jobs_dispatch[i] = std::max(next_certain_successor_jobs_dispatch[i], s->next_certain_successor_jobs_dispatch(i));
+                        next_certain_gang_source_job_dispatch[i] = std::max(next_certain_gang_source_job_dispatch[i], s->cluster(i).next_certain_gang_source_job_dispatch());
                     }
 				}
 			}
@@ -707,17 +730,18 @@ namespace NP {
 						ready_successor_jobs[i] = from.ready_successor_jobs[i];
 					}
 				}				
-				// add all jobs that were ready and were not the last job dispatched
+				// add all jobs that were ready and were not the last job dispatched or incompatible jobs with the jobs just dispatched
 				for (Job_ref rj : from.ready_successor_jobs[affinity])
 				{
-					if (rj->get_job_index() != j_index)
+					// note that job `j` is also in the list of jobs incompatible with itself
+					if (!j.is_incompatible_with(rj->get_job_index()))
 						ready_successor_jobs[affinity].push_back(rj);
 				}
 				// add all successors of j that are ready
 				for (const auto& succ : successors_of[j_index])
 				{
 					bool ready = true;
-					// succ can only **become** locally ready if the last job disptached is on the same cluster as succ
+					// succ can only **become** locally ready if the last job dispatched is on the same cluster as succ
 					auto succ_aff = succ.first->get_affinity();
 					bool locally_ready = (succ_aff == affinity);
 					for (const auto& pred : predecessors_of[succ.first->get_job_index()])

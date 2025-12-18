@@ -190,8 +190,10 @@ static Analysis_result analyze(
 	bool schedulable = space->is_schedulable();
 	if(want_deadline_miss_info && !schedulable) {
 		auto deadline_miss_state = space->get_deadline_miss_state();
-		deadline_miss_state.first->export_node(deadline_miss_stream, jobs);
-		deadline_miss_state.second->export_state(deadline_miss_stream, jobs);
+		if (deadline_miss_state.first.get() != nullptr)
+			deadline_miss_state.first->export_node(deadline_miss_stream, jobs);
+		if (deadline_miss_state.second.get() != nullptr)
+			deadline_miss_state.second->export_state(deadline_miss_stream, jobs);
 	}
 
 	Analysis_result results = Analysis_result{
