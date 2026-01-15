@@ -121,12 +121,10 @@ class Taskchains_state_extension : public State_extension<Time>
 			current_offset += n_total_tasks;
 			off_eit_reac_int = current_offset; 
 			current_offset += n_total_tasks;
-			if (multiproc) {
-				off_eit_age_out = current_offset; 
-				current_offset += n_total_tasks;
-				off_eit_reac_out = current_offset; 
-				current_offset += n_total_tasks;
-			}
+			off_eit_age_out = current_offset; 
+			current_offset += n_total_tasks;
+			off_eit_reac_out = current_offset; 
+			current_offset += n_total_tasks;
 			data.resize(current_offset);
 
 			// Initialize all arrays to default values
@@ -135,10 +133,8 @@ class Taskchains_state_extension : public State_extension<Time>
 			std::fill(EST_prev(), EST_prev() + n_chains, T(0));
 			std::fill(EIT_Age_int(), EIT_Age_int() + n_total_tasks, T(0));
 			std::fill(EIT_Reac_int(), EIT_Reac_int() + n_total_tasks, T(INVALID));
-			if (multiproc) {
-				std::fill(EIT_Age_out(), EIT_Age_out() + n_total_tasks, T(0));
-				std::fill(EIT_Reac_out(), EIT_Reac_out() + n_total_tasks, T(INVALID));
-			}
+			std::fill(EIT_Age_out(), EIT_Age_out() + n_total_tasks, T(0));
+			std::fill(EIT_Reac_out(), EIT_Reac_out() + n_total_tasks, T(INVALID));
 		}
 
 		// Fast full copy (could be replaced with selective copying later)
@@ -303,32 +299,14 @@ public:
             size_t base = tc_data.chain_offset[c];
 			for (size_t t = 0; t < len; ++t) {
 				size_t i = base + t;
-
                 // Age_int
-                if (tc_data.EIT_Age_int()[i] != INVALID && other_data.EIT_Age_int()[i] != INVALID)
-                    tc_data.EIT_Age_int()[i] = std::min(tc_data.EIT_Age_int()[i], other_data.EIT_Age_int()[i]);
-                else if (tc_data.EIT_Age_int()[i] == INVALID && other_data.EIT_Age_int()[i] != INVALID)
-                    tc_data.EIT_Age_int()[i] = other_data.EIT_Age_int()[i];
-
+                tc_data.EIT_Age_int()[i] = min_star(tc_data.EIT_Age_int()[i], other_data.EIT_Age_int()[i]);
                 // Reac_int
-                if (tc_data.EIT_Reac_int()[i] != INVALID && other_data.EIT_Reac_int()[i] != INVALID)
-                    tc_data.EIT_Reac_int()[i] = std::min(tc_data.EIT_Reac_int()[i], other_data.EIT_Reac_int()[i]);
-                else if (tc_data.EIT_Reac_int()[i] == INVALID && other_data.EIT_Reac_int()[i] != INVALID)
-                    tc_data.EIT_Reac_int()[i] = other_data.EIT_Reac_int()[i];
-
-				if (multiproc) {
-                    // Age_out
-                    if (tc_data.EIT_Age_out()[i] == INVALID && other_data.EIT_Age_out()[i] != INVALID)
-                        tc_data.EIT_Age_out()[i] = other_data.EIT_Age_out()[i];
-                    else if (tc_data.EIT_Age_out()[i] != INVALID && other_data.EIT_Age_out()[i] != INVALID)
-                        tc_data.EIT_Age_out()[i] = std::min(tc_data.EIT_Age_out()[i], other_data.EIT_Age_out()[i]);
-
-                    // Reac_out
-                    if (tc_data.EIT_Reac_out()[i] != INVALID && other_data.EIT_Reac_out()[i] != INVALID)
-                        tc_data.EIT_Reac_out()[i] = std::min(tc_data.EIT_Reac_out()[i], other_data.EIT_Reac_out()[i]);
-                    else if (tc_data.EIT_Reac_out()[i] == INVALID && other_data.EIT_Reac_out()[i] != INVALID)
-                        tc_data.EIT_Reac_out()[i] = other_data.EIT_Reac_out()[i];
-				}
+                tc_data.EIT_Reac_int()[i] = min_star(tc_data.EIT_Reac_int()[i], other_data.EIT_Reac_int()[i]);                
+				// Age_out
+                tc_data.EIT_Age_out()[i] = min_star(tc_data.EIT_Age_out()[i], other_data.EIT_Age_out()[i]);
+                // Reac_out
+                tc_data.EIT_Reac_out()[i] = min_star(tc_data.EIT_Reac_out()[i], other_data.EIT_Reac_out()[i]);
 			}
 		}
 	}
@@ -405,13 +383,32 @@ private:
 		const State_space_data<Time>& ssd, const Time& EST, const Time&, const Time&, const Time& LFT,
 		const size_t ssd_ext_id, const Schedule_state<Time>& new_state)
 	{
+		//static int counter = 0;
 		auto space_ext = ssd.get_extensions().get<Taskchains_sp_data_extension<Time>>(ssd_ext_id);
 		const auto& chains = space_ext->get_task_chains();
 		const Job<Time>& job = ssd.jobs[idx];
 		const unsigned long tau_j = job.get_task_id();
+		const bool singleproc = not tc_data.is_multiproc();
 
 		// Bulk copy previous chain data
 		tc_data.copy_from(from.tc_data);
+
+		// update *out* views
+		for (const auto& tc : chains) {
+			size_t tc_id = tc.get_id();
+			size_t pos = tc_data.chain_offset[tc_id];
+			const auto& tasks = tc.get_tasks();
+			for (size_t k = 0; k < tasks.size(); ++k) {
+				unsigned long tau_l = tasks[k];
+				// note that `may_have_running_job` does not work for uniprocessor platforms and always returns false
+				if (tau_l != tau_j && (singleproc || !may_have_running_job(tau_l))) {
+					tc_data.EIT_Age_out()[pos] = from.tc_data.EIT_Age_int()[pos];
+					tc_data.EIT_Reac_int()[pos] = INVALID;
+					tc_data.EIT_Reac_out()[pos] = min_star(from.tc_data.EIT_Reac_int()[pos], from.tc_data.EIT_Reac_out()[pos]);
+				}
+				++pos;
+			}
+		}
 
 		for (const auto& info : space_ext->get_task_chains_of(tau_j)) {
 			size_t tc_id = info.chain_id;
@@ -423,9 +420,15 @@ private:
 
 			if (is_source) {
 				tc_data.EST_prev()[tc_id] = EST;
-				tc_data.EIT_Age_int()[pos] = tc.uses_event_input() ? from.tc_data.EST_prev()[tc_id] + Time_model::constants<Time>::epsilon() : EST;
-				//if (from.tc_data.EIT_Reac_int()[pos] == INVALID)
-				tc_data.EIT_Reac_int()[pos] = tc.uses_event_input() ? from.tc_data.EST_prev()[tc_id] + Time_model::constants<Time>::epsilon() : EST;
+				if (tc.uses_event_input()) {
+					Time EST_prev = from.tc_data.EST_prev()[tc_id];
+					tc_data.EIT_Age_int()[pos] = EST_prev;
+					tc_data.EIT_Reac_int()[pos] = min_star(EST_prev, from.tc_data.EIT_Reac_int()[pos]);
+				}
+				else {
+					tc_data.EIT_Age_int()[pos] = EST;
+					tc_data.EIT_Reac_int()[pos] = min_star(EST, from.tc_data.EIT_Reac_int()[pos]);
+				}
 			}
 			else { 
 				const auto& tasks = tc.get_tasks();
@@ -433,18 +436,18 @@ private:
 				tc_data.EIT_Reac_out()[pred_pos] = INVALID;
 
 				// note that `pred_pos_running` is always false if the platform is uniprocessor
-				bool pred_pos_running = may_have_running_job(tasks[index - 1]);
+				bool pred_pos_running = !singleproc && may_have_running_job(tasks[index - 1]);
 				if (pred_pos_running)
 					tc_data.EIT_Age_int()[pos] = from.tc_data.EIT_Age_out()[pred_pos];
 				else
 					tc_data.EIT_Age_int()[pos] = from.tc_data.EIT_Age_int()[pred_pos];
 				
 				// note that `pred_cert_running` is always false if the platform is uniprocessor
-				bool pred_cert_running = is_certainly_running(tasks[index - 1], new_state, ssd);
+				bool pred_cert_running = !singleproc && is_certainly_running(tasks[index - 1], new_state, ssd);
 				if (pred_cert_running)
-					tc_data.EIT_Reac_int()[pos] = from.tc_data.EIT_Reac_out()[pred_pos];
+					tc_data.EIT_Reac_int()[pos] = min_star(from.tc_data.EIT_Reac_int()[pos], from.tc_data.EIT_Reac_out()[pred_pos]);
 				else
-					tc_data.EIT_Reac_int()[pos] = min_star(from.tc_data.EIT_Reac_out()[pred_pos], from.tc_data.EIT_Reac_int()[pred_pos]);
+					tc_data.EIT_Reac_int()[pos] = min_star(from.tc_data.EIT_Reac_int()[pos], min_star(from.tc_data.EIT_Reac_out()[pred_pos], from.tc_data.EIT_Reac_int()[pred_pos]));
 			}
 			
 			if (is_sink) {
@@ -453,26 +456,12 @@ private:
 				tc_data.DA_max()[tc_id] = std::max(tc_data.DA_max()[tc_id], data_age);
 				if (tc_data.EIT_Reac_int()[pos] != INVALID) {
 					Time reaction_time = LFT - tc_data.EIT_Reac_int()[pos];
+					//std::cout << counter << "," << reaction_time << "\n";
+					//counter++;
 					space_ext->submit_reaction_time(tc_id, reaction_time);
 					tc_data.RT_max()[tc_id] = std::max(tc_data.RT_max()[tc_id], reaction_time);
 					tc_data.EIT_Reac_int()[pos] = INVALID;
 				}
-			}
-		}
-		// update *out* views
-		for (const auto& tc : chains) {
-			size_t tc_id = tc.get_id();
-			size_t pos = tc_data.chain_offset[tc_id];
-			const auto& tasks = tc.get_tasks();
-			for (size_t k = 0; k < tasks.size(); ++k) {
-				unsigned long tau_l = tasks[k];
-				// note that `may_have_running_job` always returns false except for the last dispatched job if the platform is uniprocessor
-				if (!may_have_running_job(tau_l)) {
-					tc_data.EIT_Age_out()[pos] = from.tc_data.EIT_Age_int()[pos];
-					tc_data.EIT_Reac_int()[pos] = INVALID;
-					tc_data.EIT_Reac_out()[pos] = min_star(from.tc_data.EIT_Reac_int()[pos], from.tc_data.EIT_Reac_out()[pos]);
-				}
-				++pos;
 			}
 		}
 	}

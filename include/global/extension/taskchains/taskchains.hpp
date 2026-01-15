@@ -1,6 +1,8 @@
 #ifndef TASKCHAINS_HPP
 #define TASKCHAINS_HPP
 
+#include <vector>
+#include "io.hpp"
 #include "jobs.hpp"
 
 namespace NP{
