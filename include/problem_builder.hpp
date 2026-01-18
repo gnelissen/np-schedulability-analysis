@@ -167,6 +167,21 @@ namespace NP {
 			auto mk_constraints = NP::Global::MK_analysis::parse_mk_constraints_csv(mk_stream);
 			problem.problem_extensions.template register_extension<NP::Global::MK_analysis::MK_problem_extension>(mk_constraints);
 		}
+		if (config.want_task_chains) {
+			if (config.task_chains_file.empty()) {
+				std::cerr << "Error: task chains specifications file not specified." << std::endl;
+				exit(1);
+			}
+			bool tc_is_yaml = is_yaml(config.task_chains_file);
+			if (!tc_is_yaml) {
+				std::cerr << "Error: task chains file must be in YAML format." << std::endl;
+				exit(1);
+			}
+			auto tc_stream = open_file_stream(config.task_chains_file);
+			
+			auto task_chains = NP::Global::Taskchains_analysis::template parse_yaml_task_chain_file<Time>(tc_stream);
+			problem.problem_extensions.template register_extension<NP::Global::Taskchains_analysis::Taskchains_problem_extension<Time>>(task_chains);
+		}
 	}
 #endif
 }

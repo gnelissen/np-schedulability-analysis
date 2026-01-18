@@ -26,7 +26,10 @@ struct Analysis_result {
 	std::string width_evolution_csv;
 	std::string deadline_miss_info;
 #ifdef CONFIG_ANALYSIS_EXTENSIONS
+	// mk-firm analysis results
 	std::string mk_results;
+	// task chains analysis results
+	std::string task_chains_results;
 #endif
 };
 
@@ -117,6 +120,14 @@ void save_result_files(const std::string& fname, const Analysis_result& result, 
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
 	if (config.want_dot_graph && !result.graph.empty()) {
 		save_file_with_extension(fname, ".dot", result.graph);
+	}
+#endif
+#ifdef CONFIG_ANALYSIS_EXTENSIONS
+	if (config.want_mk && !result.mk_results.empty()) {
+		save_file_with_extension(fname, ".mk.csv", result.mk_results);
+	}
+	if (config.want_task_chains && !result.task_chains_results.empty()) {
+		save_file_with_extension(fname, ".tchains.csv", result.task_chains_results);
 	}
 #endif
 }
@@ -250,6 +261,10 @@ Analysis_result get_analysis_result(const std::unique_ptr<NP::Global::State_spac
 	if (config.want_mk) {
 		auto mk_stream = space->template export_results<NP::Global::MK_analysis::MK_sp_data_extension<Time>>();
 		result.mk_results = mk_stream.str();
+	}
+	if (config.want_task_chains) {
+		auto tc_stream = space->template export_results<NP::Global::Taskchains_analysis::template Taskchains_sp_data_extension<Time>>();
+		result.task_chains_results = tc_stream.str();
 	}
 #endif		
 	return result;

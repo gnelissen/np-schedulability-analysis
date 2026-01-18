@@ -44,6 +44,7 @@
 
 #ifdef CONFIG_ANALYSIS_EXTENSIONS
 #include "global/extension/mk-firm/mk_extension.hpp"
+#include "global/extension/taskchains/taskchains_extension.hpp"
 #endif // CONFIG_ANALYSIS_EXTENSIONS
 
 namespace NP {
@@ -421,6 +422,15 @@ namespace NP {
 				{
 					// If yes, activate MK analysis
 					MK_analysis::MK_extension<Time>::activate(sp_data, jobs.size(), mk_ext->get_mk_constraints());
+				}
+				// check if the Task Chains analysis extension is registered
+				using TC_problem_ext = Taskchains_analysis::Taskchains_problem_extension<Time>;
+				auto tc_ext = problem_extensions.template get<TC_problem_ext>();
+				if (tc_ext)
+				{
+					// If yes, activate task chains analysis
+					using TC_ext = Taskchains_analysis::Taskchains_analysis_extension<Time>;
+					TC_ext::activate(sp_data, jobs, tc_ext->get_task_chains());
 				}
 #endif // CONFIG_ANALYSIS_EXTENSIONS
 			}

@@ -59,8 +59,12 @@ struct Analysis_config {
 #endif
 
 #ifdef CONFIG_ANALYSIS_EXTENSIONS
+	// MK-firm extension
 	bool want_mk = false;
 	std::string mk_file;
+	// Task Chains extension
+	bool want_task_chains = false;
+	std::string task_chains_file;
 #endif
 
 #ifdef CONFIG_COLLECT_SCHEDULE_GRAPH
@@ -223,9 +227,8 @@ Analysis_config parse_config_file(const std::string& config_file) {
             if (analysis["extensions"]) {
                 auto ext = analysis["extensions"];
 				if (config["input"] && config["input"]["extensions"]) {
-					// Future: mk_constraints, task_chains
 					auto ext_input = config["input"]["extensions"];
-					// Example of parsing for future analysis extensions
+					// mk_constraints
 					if (ext["activate_mk_analysis"]) {
 						bool want_mk = ext["activate_mk_analysis"].as<bool>();
 						if (want_mk ) {
@@ -236,12 +239,17 @@ Analysis_config parse_config_file(const std::string& config_file) {
 						}
 						analysis_config.want_mk = want_mk;
 					}
-					/*if (ext["activate_task_chains"]) {
+					// task chains
+					if (ext["activate_task_chains"]) {
 						bool want_tc = ext["activate_task_chains"].as<bool>();
-						if (want_tc && ext_input["task_chains"]) {
-							options["task_chains_file"] = ext_input["task_chains"].as<std::string>();
+						if (want_tc) {
+							if (ext_input["task_chains"])
+								analysis_config.task_chains_file = ext_input["task_chains"].as<std::string>();
+							else
+								std::cerr << "A task chains file must be specified if the task chains analysis is activated.";
 						}
-					}*/
+						analysis_config.want_task_chains = want_tc;
+					}
 				}
 			}
 			#endif
@@ -504,9 +512,27 @@ void parse_input_options(const optparse::Values& options, Analysis_config& analy
 			exit(1);
 		}
 	}
+	// Task Chains analysis
+	if (options.is_set_by_user("task_chains_file")) {
+		analysis_config.want_task_chains = true;
+		std::string tc_file = (const std::string&)options.get("task_chains_file");
+		if (!tc_file.empty()) {
+			analysis_config.task_chains_file = tc_file;
+		}
+		else {
+			std::cerr << "Error: task chains specifications file not specified" << std::endl;
+			exit(1);
+		}
+	}
 	#else
 	if (options.is_set_by_user("mk_file")) {
 		std::cerr << "Error: mk-firm analysis support must be enabled "
+		          << "during compilation (ANALYSIS_EXTENSIONS must be set)."
+		          << std::endl;
+		exit(1);
+	}
+	if (options.is_set_by_user("task_chains_file")) {
+		std::cerr << "Error: task chains analysis support must be enabled "
 		          << "during compilation (ANALYSIS_EXTENSIONS must be set)."
 		          << std::endl;
 		exit(1);

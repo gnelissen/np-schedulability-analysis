@@ -238,6 +238,9 @@ int main(int argc, char** argv)
 		.help("[experimental] name of the file that contains the mk-firm specifications (CSV)")
 		.set_default("");
 
+	parser.add_option("--taskchains").dest("task_chains_file").set_default("")
+		.help("yaml file containing the task chains specification for the task chains analysis extension");
+
 #ifdef CONFIG_PARALLEL
 	parser.add_option("--parallel").dest("parallel").set_default("1")
 		.action("store_const").set_const("1")
