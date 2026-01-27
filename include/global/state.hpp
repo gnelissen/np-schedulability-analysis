@@ -284,12 +284,11 @@ namespace NP {
 						// Note that that with conditional DAGs, it is *NOT TRUE* anymore that if 
 						// `job` has non-completed successors in the new state,
 						// it must have had non-completed successors in the previous state too
-						auto it_idx = it->first->get_job_index();
 						// advance the iterator until we find the job or pass it
-						while (it != from.job_finish_times.end() && it_idx < job_index) {
+						while (it != from.job_finish_times.end() && it->first->get_job_index() < job_index) {
 							it++;
 						}
-						if (it == from.job_finish_times.end() || it_idx > job_index) {
+						if (it == from.job_finish_times.end() || it->first->get_job_index() > job_index) {
 							continue;
 						}
 						Time job_eft = it->second.min();

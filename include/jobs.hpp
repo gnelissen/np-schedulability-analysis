@@ -8,6 +8,7 @@
 #include <functional> // for hash
 #include <exception>
 #include <set>
+#include <map>
 
 #include "robin_hood.h"
 #include "time.hpp"
