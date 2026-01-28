@@ -56,9 +56,6 @@ public:
 				if (it == from.job_times.end() || it->job_idx > job)
 					continue;
 
-				Time job_eft = it->time_interval.min();
-				Time job_lft = it->time_interval.max();
-				
 				// FT^min(job,v') = FT^min(job,v)
 				// FT^max(job,v') = 
 				// \begin{cases}
@@ -66,6 +63,8 @@ public:
 				//   min( FT^max(job,v), LST(j,v) - delay_min(job,j) ) & m>1 \wedge job \in Pred^f(j) U Mutx^f(j) \\
 				//	 FT^max(job,v) & \text{otherwise}
 				// \end{cases}
+				Time job_eft = it->time_interval.min();
+				Time job_lft = it->time_interval.max();
 				if (single_core && job_lft > lst) {
 					// If there is a single-core, we know that jobs dispatched in the past
 					// must finish before the new job can start
