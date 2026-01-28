@@ -211,6 +211,10 @@ namespace NP {
 			Interval<Time> ready_times(const Node& n, const State& s, const Job<Time>& j) const
 			{
 				Interval<Time> r = j.arrival_window();
+				Time lower_bound = r.min();
+				if (j.get_type() == Job<Time>::Job_type::C_JOIN) {
+					lower_bound = Time_model::constants<Time>::infinity();
+				}
 				const auto& cstr = inter_job_constraints[j.get_job_index()];
 				for (const auto& pred : cstr.predecessors_start_to_start)
 				{
@@ -220,10 +224,10 @@ namespace NP {
 					if (has_st) {
 						if (j.get_type() == Job<Time>::Job_type::C_JOIN) {
 							// for conditional join nodes, take the minimum constraint imposed by predecessors
-							r.reduce_to(st.min() + pred.delay.min());
+							lower_bound = std::min(lower_bound, st.min() + pred.delay.min());
 						} else {
 							// for other jobs, take the maximum constraint imposed by predecessors
-							r.lower_bound(st.min() + pred.delay.min());
+							lower_bound = std::max(lower_bound, st.min() + pred.delay.min());
 						}
 						r.extend_to(st.max() + pred.delay.max());
 					}
@@ -248,10 +252,10 @@ namespace NP {
 					if (has_ft) {
 						if (j.get_type() == Job<Time>::Job_type::C_JOIN) {
 							// for conditional join nodes, take the minimum constraint imposed by predecessors
-							r.reduce_to(ft.min() + pred.delay.min());
+							lower_bound = std::min(lower_bound, ft.min() + pred.delay.min());
 						} else {
 							// for other jobs, take the maximum constraint imposed by predecessors
-							r.lower_bound(ft.min() + pred.delay.min());
+							lower_bound = std::max(lower_bound, ft.min() + pred.delay.min());
 						}
 						r.extend_to(ft.max() + pred.delay.max());
 					}
@@ -266,6 +270,7 @@ namespace NP {
 					r.lower_bound(ft.min() + excl.delay.min());
 					r.extend_to(ft.max() + excl.delay.max());
 				}
+				r.lower_bound(lower_bound);
 				return r;
 			}
 

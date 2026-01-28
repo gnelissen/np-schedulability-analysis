@@ -100,7 +100,9 @@ static void process_file(const std::string& fname, const Analysis_config& config
 			analyze<dense_t, NP::Global::State_space<dense_t>>(fname, config) :
 			analyze<dtime_t, NP::Global::State_space<dtime_t>>(fname, config);
 
-		save_result_files(fname, result, config);
+		// remove extension
+		auto output_fname = fname.substr(0, fname.find_last_of('.'));
+		save_result_files(output_fname, result, config);
 
 		if (config.want_header) {
 			print_header();

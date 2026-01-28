@@ -140,20 +140,22 @@ namespace NP {
 				std::ostringstream export_results(const State_space_data<Time>& sp_data) const override
 				{
 					auto ss = std::ostringstream();
-					ss << "Task Chain ID, Max Data Age, Max Reaction Time" << std::endl;
+					ss << "Task Chain ID, Task Chain Index, Max Data Age, Max Reaction Time" << std::endl;
 					for (unsigned long i = 0; i < task_chains.size(); ++i) {
 						const auto& tc = task_chains[i];
 						auto length = tc.get_tasks().size();
-						ss << tc.get_id() << ", "
+						ss << tc.get_name() << ", "
+						   << tc.get_id() << ", "
 						   << results[i][length - 1].max_data_age << ", "
 						   << results[i][length - 1].max_reaction_time << std::endl;
 					}
 					ss << "---" << std::endl;
-					ss << "Task Chain ID, Task Position, Max Data Age, Max Reaction Time" << std::endl;
+					ss << "Task Chain ID, Task Chain Index, Task Position, Max Data Age, Max Reaction Time" << std::endl;
 					for (unsigned long i = 0; i < task_chains.size(); ++i) {
 						const auto& tc = task_chains[i];
 						for (unsigned long j = 0; j < tc.get_tasks().size(); ++j) {
-							ss << tc.get_id() << ", "
+							ss << tc.get_name() << ", "
+							   << tc.get_id() << ", "
 							   << j << ", "
 							   << results[i][j].max_data_age << ", "
 							   << results[i][j].max_reaction_time << std::endl;

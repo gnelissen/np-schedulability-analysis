@@ -15,6 +15,8 @@ namespace NP{
             private:
                 // unique identifier for the task chain
                 const unsigned long id;
+                // name of the task chain
+                const std::string name;
 
                 // a task chain is a sequence of tasks
                 const std::vector<unsigned long> tasks;
@@ -33,6 +35,7 @@ namespace NP{
                  * @param event_input Boolean indicating if the chain uses event-triggered input
                  * @param instantaneous_output Boolean indicating if the chain uses instantaneous output
                  * @param id Unique identifier for the task chain
+                 * @param name Name of the task chain
                  * @param i_max_interarrival Maximum interarrival time of events triggering the input of the chain (only relevant if event_input is true)
                  * @param o_data_availability Maximum data availability for lasting output (only relevant if instantaneous_output is false)
                  */
@@ -42,8 +45,9 @@ namespace NP{
                     const bool& instantaneous_output,
                     const unsigned long id,
                     const Time i_max_interarrival = -1,
-                    const Time o_data_availability = -1)
-                    : tasks(tasks), event_input(event_input), instantaneous_output(instantaneous_output), id(id),
+                    const Time o_data_availability = -1,
+                    const std::string& name = "")
+                    : tasks(tasks), event_input(event_input), instantaneous_output(instantaneous_output), id(id), name(name),
                       input_max_interarrival(event_input && i_max_interarrival >= 0 ? i_max_interarrival : Time_model::constants<Time>::infinity()), 
                       output_data_availability(!instantaneous_output && o_data_availability >= 0 ? o_data_availability : Time_model::constants<Time>::infinity())
 
@@ -84,6 +88,12 @@ namespace NP{
                 unsigned long get_id() const {
                     return id;
                 }
+                /**
+                 * @brief Get the name of the task chain
+                 */
+                const std::string& get_name() const {
+                    return name;
+                }
             };
 
             /**
@@ -103,6 +113,9 @@ namespace NP{
                     auto const TCs = input_tc_set["TaskChains"];
                     unsigned long chain_id = 0;
                     for (auto const& tc : TCs) {
+                        std::string tc_name = "";
+                        if (tc["ID"])
+                            tc_name = tc["ID"].as<std::string>();
                         task_ids = tc["Tasks"].as<std::vector<unsigned long>>();
                         // read input type
                         auto inputtype = tc["Input"]["Type"].as<std::string>();
@@ -128,7 +141,7 @@ namespace NP{
                             }
                         }
 
-                        taskchains.push_back(Task_chain<Time>(task_ids, inputtype == "onExternalEvent", outputtype != "blackboard", chain_id, input_max_interarrival, output_data_availability));
+                        taskchains.push_back(Task_chain<Time>(task_ids, inputtype == "onExternalEvent", outputtype != "blackboard", chain_id, input_max_interarrival, output_data_availability, tc_name));
                         chain_id++;
                     }
                 }
