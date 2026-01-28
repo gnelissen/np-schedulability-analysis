@@ -158,6 +158,11 @@ namespace NP {
 			Interval<Time> ready_times(const State& s, const Job<Time>& j) const
 			{
 				Interval<Time> r = j.arrival_window();
+				Time eft_preds;
+				if (j.get_type() == Job<Time>::Job_type::C_JOIN)
+					eft_preds = Time_model::constants<Time>::infinity();
+				else
+					eft_preds = 0;
 				for (const auto& pred : predecessors_suspensions[j.get_job_index()])
 				{
 					auto pred_idx = pred.first->get_job_index();
@@ -166,14 +171,15 @@ namespace NP {
 					bool has_ft = s.get_finish_times(pred_idx, ft);
 					if (has_ft) {
 						if (j.get_type() == Job<Time>::Job_type::C_JOIN)
-							r.lower_to(ft.min() + pred_susp.min());
+							eft_preds = std::min(eft_preds, ft.min() + pred_susp.min());
 						else
-							r.lower_bound(ft.min() + pred_susp.min());
+							eft_preds = std::max(eft_preds, ft.min() + pred_susp.min());
 						r.extend_to(ft.max() + pred_susp.max());
 					}
 					// only reason a predecessor of `j` may not have a finish time is if it is a conditional join node
 					assert(has_ft || j.get_type() == Job<Time>::Job_type::C_JOIN);
 				}
+				r.lower_bound(eft_preds);
 				return r;
 			}
 

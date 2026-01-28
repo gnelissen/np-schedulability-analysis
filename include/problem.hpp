@@ -157,6 +157,23 @@ namespace NP {
 			return graph;
 		}
 
+		// Get all descendants of a job using precomputed graph
+		std::set<Job_index> get_descendants(Job_index job_index, const DAG_Graph& graph) {
+			std::set<Job_index> descendants;
+			std::vector<Job_index> stack;
+			stack.push_back(job_index);
+			while (!stack.empty()) {
+				Job_index current = stack.back();
+				stack.pop_back();
+				for (Job_index succ : graph.successors[current]) {
+					if (descendants.insert(succ).second) {
+						stack.push_back(succ);
+					}
+				}
+			}
+			return descendants;
+		}
+
 		void initialise_c_dags() {
 			if (prec.empty()) return;
 
@@ -167,8 +184,6 @@ namespace NP {
 			set_conditional_siblings(jobs, graph);
 			// Set incompatible jobs for conditional DAGs
 			find_all_incompatible_jobs(jobs, graph);
-			// Optimize the incompatible jobs for the analysis
-			reduce_incompatibilities(jobs, graph);
 			// Set the topological order for each job
 			set_rank_order(jobs, graph);
 		}
@@ -229,140 +244,41 @@ namespace NP {
 			}
 		}
 
-		// Find incompatible jobs for all jobs using reverse topological order
 		void find_all_incompatible_jobs(Workload& jobs, const DAG_Graph& graph) {
-			const std::size_t n = jobs.size();
-			
-			// Compute reverse topological order (process sinks first)
-			std::vector<std::size_t> out_degree(n);
+			const std::size_t n = graph.id_to_index.size();
+			std::vector<bool> calculated(n, false);
 			for (std::size_t i = 0; i < n; ++i) {
-				out_degree[i] = graph.successors[i].size();
-			}
-
-			std::vector<Job_index> order;
-			order.reserve(n);			
-			// Find sink nodes (no successors)
-			for (std::size_t i = 0; i < n; ++i) {
-				if (out_degree[i] == 0) {
-					order.push_back(i);
-				}
-			}
-			// BFS in reverse topological order
-			std::size_t head = 0;
-			while (head < order.size()) {
-				Job_index current = order[head++];
-				for (Job_index pred : graph.predecessors[current]) {
-					if (--out_degree[pred] == 0) {
-						order.push_back(pred);
-					}
-				}
-			}
-			// Process jobs in reverse topological order (sinks first)
-			for (Job_index idx : order) {
-				compute_incompatible_jobs_for(idx, jobs, graph);
-			}
-		}
-
-		// Compute incompatible jobs for a single job
-		void compute_incompatible_jobs_for(Job_index idx, Workload& jobs, const DAG_Graph& graph) {
-			Job<Time>& current_job = jobs[idx];
-			const auto& successors = graph.successors[idx];
-			
-			if (successors.empty())
-				return;
-
-			std::set<Job_index> incompatible_jobs;
-			bool is_fork = (current_job.get_type() == Job<Time>::Job_type::C_FORK);
-			bool first_successor = true;
-
-			for (Job_index succ_idx : successors) {
-				Job<Time>& successor_job = jobs[succ_idx];
-				auto succ_incompatible = successor_job.get_incompatible_jobs_without_itself();
-
-				if (is_fork) {
-					// For FORK: intersection of all successors' incompatible jobs
-					if (first_successor) {
-						incompatible_jobs.insert(succ_incompatible.begin(), succ_incompatible.end());
-						first_successor = false;
-					} else {
-						std::set<Job_index> intersection;
-						std::set_intersection(
-							incompatible_jobs.begin(), incompatible_jobs.end(),
-							succ_incompatible.begin(), succ_incompatible.end(),
-							std::inserter(intersection, intersection.begin()));
-						incompatible_jobs = std::move(intersection);
-					}
-				} else if (successor_job.get_type() == Job<Time>::Job_type::C_JOIN) {
-					// For JOIN successor: union with special handling
-					// if successor is a JOIN then it should be the only successor
-					assert(successors.size() == 1);
-					auto my_ancestors = get_ancestors(idx, graph);
-					auto succ_ancestors = get_ancestors(succ_idx, graph);
-
-					std::set<Job_index> union_set(succ_incompatible.begin(), succ_incompatible.end());
-					union_set.insert(succ_ancestors.begin(), succ_ancestors.end());
-					
-					// Remove my ancestors and myself
-					for (Job_index anc : my_ancestors) {
-						union_set.erase(anc);
-					}
-					union_set.erase(idx);
-
-					incompatible_jobs.insert(union_set.begin(), union_set.end());
-				} else {
-					// Default: union of incompatible jobs
-					incompatible_jobs.insert(succ_incompatible.begin(), succ_incompatible.end());
-				}
-			}
-
-			for (Job_index inc : incompatible_jobs) {
-				current_job.add_incompatible_job(inc);
-			}
-		}
-
-		// Remove unnecessary incompatibilities for optimization
-		void reduce_incompatibilities(Workload& jobs, const DAG_Graph& graph) {
-			std::set<Job_index> processed;
-
-			for (std::size_t i = 0; i < jobs.size(); ++i) {
-				Job<Time>& job = jobs[i];
-				Job_index idx = job.get_job_index();
-
-				if (processed.count(idx)) continue;
-
-				if (!job.is_conditional_sibling()) {
-					// Non-conditional siblings: remove all incompatibilities
-					job.remove_incompatible_jobs();
-					processed.insert(idx);
-				} else {
-					// Conditional sibling: process all siblings together
-					Job_index pred_idx = job.get_conditional_predecessor();
-					const auto& siblings = graph.successors[pred_idx];
-
-					// Compute intersection of all siblings' incompatible jobs
-					std::set<Job_index> common_incompatible;
-					bool first = true;
-
-					for (Job_index sib : siblings) {
-						auto sib_incompatible = jobs[sib].get_incompatible_jobs_without_itself();
-						if (first) {
-							common_incompatible.insert(sib_incompatible.begin(), sib_incompatible.end());
-							first = false;
-						} else {
-							std::set<Job_index> intersection;
-							std::set_intersection(
-								common_incompatible.begin(), common_incompatible.end(),
-								sib_incompatible.begin(), sib_incompatible.end(),
-								std::inserter(intersection, intersection.begin()));
-							common_incompatible = std::move(intersection);
+				// if we did not compute the incompatible jobs for job i yet
+				if (calculated[i] == false) {
+					Job<Time>& job = jobs[i];
+					// compute incompatible jobs for job i
+					if (job.is_conditional_sibling()) {
+						// compute incompatible jobs for all siblings at once
+						const auto& preds = graph.predecessors[i];
+						assert(preds.size() == 1); // conditional siblings have exactly one conditional predecessor
+						const auto& sibs = graph.successors[preds[0]];
+						assert(sibs.size() >= 2); // must be at least two siblings
+						std::vector<std::set<Job_index>> sib_descendants(sibs.size());
+						// union of all descendants of all siblings and siblings themsleves
+						std::set<Job_index> union_set;
+						for (std::size_t s = 0; s < sibs.size(); ++s) {
+							sib_descendants[s] = get_descendants(sibs[s], graph);
+							union_set.insert(sib_descendants[s].begin(), sib_descendants[s].end());
+							union_set.insert(sibs[s]); // include the sibling itself
+						}
+						// for each sibling, the incompatible jobs are the union minus its own descendants
+						for (std::size_t s = 0; s < sibs.size(); ++s) {
+							Job_index sib_index = sibs[s];
+							for (Job_index uj : union_set) {
+								if (sib_descendants[s].count(uj) == 0) {
+									jobs[sib_index].add_incompatible_job(uj);
+								}
+							}
 						}
 					}
-					// Remove common incompatible jobs from all siblings
-					for (Job_index sib : siblings) {
-						for (Job_index inc : common_incompatible) {
-							jobs[sib].remove_incompatible_job(inc);
-						}
-						processed.insert(sib);
+					else {
+						// non-conditional siblings have only themselves as incompatible
+						job.add_incompatible_job(i);
 					}
 				}
 			}
