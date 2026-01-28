@@ -8,12 +8,6 @@
 namespace NP{
     namespace Global {
         namespace Taskchains_analysis {
-            // Structure to hold task chains analysis results
-            template<class Time>
-            struct Task_chains_result {
-                std::vector<Time> data_ages;
-                std::vector<Time> reaction_times;
-            };
 
             // Class representing a task chain
             template<class Time>

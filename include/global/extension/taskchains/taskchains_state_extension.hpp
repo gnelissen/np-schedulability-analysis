@@ -78,7 +78,7 @@ class Taskchains_state_extension : public State_extension<Time>
 		 * @param chain_id Task chain ID
 		 * @param task_pos Position of the task in the chain
 		 */
-		inline size_t idx(size_t chain_id, size_t task_pos) const {
+		inline size_t get_idx(size_t chain_id, size_t task_pos) const {
 			return chain_offset[chain_id] + task_pos;
 		}
 		/**
@@ -484,52 +484,58 @@ private:
 		for (const auto& info : space_ext->get_task_chains_of(tau_j)) {
 			size_t tc_id = info.chain_id;
 			const auto& tc = chains[tc_id];
-			size_t index = info.position_in_chain;
-			bool is_source = (index == 0);
+			size_t pos_in_chain = info.position_in_chain;
+			bool is_source = (pos_in_chain == 0);
 			bool is_sink = info.is_sink;
-			size_t pos = tc_data.idx(tc_id, index);
+			size_t task_idx = tc_data.get_idx(tc_id, pos_in_chain);
+			bool event_input = tc.uses_event_input();
+			bool inst_output = tc.uses_instantaneous_output();
 
 			if (is_source) {
 				tc_data.EST_prev()[tc_id] = EST;
-				if (tc.uses_event_input()) {
+				if (event_input) {
 					Time EST_prev = from.tc_data.EST_prev()[tc_id];
-					tc_data.EIT_Age_int()[pos] = EST_prev;
-					tc_data.EIT_Reac_int()[pos] = min_star(EST_prev, from.tc_data.EIT_Reac_int()[pos]);
+					tc_data.EIT_Age_int()[task_idx] = EST_prev;
+					tc_data.EIT_Reac_int()[task_idx] = min_star(EST_prev, from.tc_data.EIT_Reac_int()[task_idx]);
 				}
 				else {
-					tc_data.EIT_Age_int()[pos] = EST;
-					tc_data.EIT_Reac_int()[pos] = min_star(EST, from.tc_data.EIT_Reac_int()[pos]);
+					tc_data.EIT_Age_int()[task_idx] = EST;
+					tc_data.EIT_Reac_int()[task_idx] = min_star(EST, from.tc_data.EIT_Reac_int()[task_idx]);
 				}
+
+				Time data_age = inst_output ? (LFT - tc_data.EIT_Age_int()[task_idx]) : (LFT - from.tc_data.EIT_Age_int()[task_idx]);
+				space_ext->submit_data_age(tc_id, pos_in_chain, data_age);
+				Time reaction_time = LFT - tc_data.EIT_Reac_int()[task_idx];
+				space_ext->submit_reaction_time(tc_id, pos_in_chain, reaction_time);
 			}
 			else { 
 				const auto& tasks = tc.get_tasks();
-				size_t pred_pos = pos - 1;
-				tc_data.EIT_Reac_out()[pred_pos] = INVALID;
+				size_t pred_task_idx = task_idx - 1;
+				tc_data.EIT_Reac_out()[pred_task_idx] = INVALID;
 
 				// note that `pred_pos_running` is always false if the platform is uniprocessor
-				bool pred_pos_running = multiproc && may_have_running_job(tasks[index - 1]);
+				bool pred_pos_running = multiproc && may_have_running_job(tasks[pos_in_chain - 1]);
 				if (pred_pos_running)
-					tc_data.EIT_Age_int()[pos] = from.tc_data.EIT_Age_out()[pred_pos];
+					tc_data.EIT_Age_int()[task_idx] = from.tc_data.EIT_Age_out()[pred_task_idx];
 				else
-					tc_data.EIT_Age_int()[pos] = from.tc_data.EIT_Age_int()[pred_pos];
+					tc_data.EIT_Age_int()[task_idx] = from.tc_data.EIT_Age_int()[pred_task_idx];
+				
+				Time data_age = inst_output ? (LFT - tc_data.EIT_Age_int()[task_idx]) : (LFT - from.tc_data.EIT_Age_int()[task_idx]);
+				space_ext->submit_data_age(tc_id, pos_in_chain, data_age);
 				
 				// note that `pred_cert_running` is always false if the platform is uniprocessor
-				bool pred_cert_running = multiproc && is_certainly_running(tasks[index - 1], new_state, ssd);
+				bool pred_cert_running = multiproc && is_certainly_running(tasks[pos_in_chain - 1], new_state, ssd);
 				if (pred_cert_running)
-					tc_data.EIT_Reac_int()[pos] = min_star(from.tc_data.EIT_Reac_int()[pos], from.tc_data.EIT_Reac_out()[pred_pos]);
+					tc_data.EIT_Reac_int()[task_idx] = min_star(from.tc_data.EIT_Reac_int()[task_idx], from.tc_data.EIT_Reac_out()[pred_task_idx]);
 				else
-					tc_data.EIT_Reac_int()[pos] = min_star(from.tc_data.EIT_Reac_int()[pos], min_star(from.tc_data.EIT_Reac_out()[pred_pos], from.tc_data.EIT_Reac_int()[pred_pos]));
+					tc_data.EIT_Reac_int()[task_idx] = min_star(from.tc_data.EIT_Reac_int()[task_idx], min_star(from.tc_data.EIT_Reac_out()[pred_task_idx], from.tc_data.EIT_Reac_int()[pred_task_idx]));
+				
+				Time reaction_time = LFT - tc_data.EIT_Reac_int()[task_idx];
+				space_ext->submit_reaction_time(tc_id, pos_in_chain, reaction_time);
 			}
 			
-			if (is_sink) {
-				Time data_age = tc.uses_instantaneous_output() ? (LFT - tc_data.EIT_Age_int()[pos]) : (LFT - from.tc_data.EIT_Age_int()[pos]);
-				space_ext->submit_data_age(tc_id, data_age);
-				if (tc_data.EIT_Reac_int()[pos] != INVALID) {
-					Time reaction_time = LFT - tc_data.EIT_Reac_int()[pos];
-					space_ext->submit_reaction_time(tc_id, reaction_time);
-					tc_data.EIT_Reac_int()[pos] = INVALID;
-				}
-			}
+			if (is_sink)
+				tc_data.EIT_Reac_int()[task_idx] = INVALID;
 		}
 	}
 };

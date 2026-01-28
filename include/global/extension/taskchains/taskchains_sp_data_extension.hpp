@@ -24,8 +24,13 @@ namespace NP {
 				};
 				// lookup table that maps task IDs to the list of task chains the task belongs to
 				std::vector<std::vector<Task_in_chain_info>> _task_to_chain;
+
+				struct Task_results {
+					Time max_data_age;
+					Time max_reaction_time;
+				};
 				// max data age and max reaction time for each task chain
-				Task_chains_result<Time> results;
+				std::vector<std::vector<Task_results>> results;
 				// task chains to be analyzed
 				const Task_chains& task_chains;
 
@@ -39,8 +44,10 @@ namespace NP {
 					: task_chains(task_chains)
 				{
 					// init the task chain result
-					results.data_ages.resize(task_chains.size(), -1);
-					results.reaction_times.resize(task_chains.size(), -1);
+					results.resize(task_chains.size());
+					for (size_t i = 0; i < task_chains.size(); i++) {
+						results[i].resize(task_chains[i].get_tasks().size(), {-1,-1});
+					}
 
 					// init the task to chain lookup table
 					unsigned long max_task_id = 0;
@@ -81,7 +88,7 @@ namespace NP {
 				/**
 				 * @brief Get the analysis results for the task chains
 				 */
-				const Task_chains_result<Time>& get_results() const
+				const std::vector<std::vector<Task_results>>& get_results() const
 				{
 					return results;
 				}
@@ -90,8 +97,9 @@ namespace NP {
 				 * @param taskchain Task chain ID
 				 */
 				Time get_max_data_age(unsigned long taskchain) const {
-					if (taskchain < results.data_ages.size()) {
-						return results.data_ages[taskchain];
+					if (taskchain < results.size()) {
+						auto p = task_chains[taskchain].get_tasks().size() - 1;
+						return results[taskchain][p].max_data_age;
 					}
 					return -1;
 				}
@@ -100,8 +108,9 @@ namespace NP {
 				 * @param taskchain Task chain ID
 				 */
 				Time get_max_reaction_time(unsigned long taskchain) const {
-					if (taskchain < results.reaction_times.size()) {
-						return results.reaction_times[taskchain];
+					if (taskchain < results.size()) {
+						auto p = task_chains[taskchain].get_tasks().size() - 1;
+						return results[taskchain][p].max_reaction_time;
 					}
 					return -1;
 				}
@@ -110,16 +119,20 @@ namespace NP {
 				 * @param taskchain Task chain ID
 				 * @param DA Data age to submit
 				 */
-				void submit_data_age(unsigned long taskchain, Time DA) {
-					results.data_ages[taskchain] = std::max(DA, results.data_ages[taskchain]);
+				void submit_data_age(unsigned long taskchain, unsigned long task_pos, Time DA) {
+					assert(taskchain < results.size());
+					assert(task_pos < results[taskchain].size());
+					results[taskchain][task_pos].max_data_age = std::max(DA, results[taskchain][task_pos].max_data_age);
 				}
 				/**
 				 * @brief Submit a new reaction time measurement for a given task chain
 				 * @param taskchain Task chain ID
 				 * @param RT Reaction time to submit
 				 */
-				void submit_reaction_time(unsigned long taskchain, Time RT) {
-					results.reaction_times[taskchain] = std::max(RT, results.reaction_times[taskchain]);
+				void submit_reaction_time(unsigned long taskchain, unsigned long task_pos, Time RT) {
+					assert(taskchain < results.size());
+					assert(task_pos < results[taskchain].size());
+					results[taskchain][task_pos].max_reaction_time = std::max(RT, results[taskchain][task_pos].max_reaction_time);
 				}
 				/**
 				 * @brief Export the task chains analysis results in CSV format
@@ -129,9 +142,22 @@ namespace NP {
 					auto ss = std::ostringstream();
 					ss << "Task Chain ID, Max Data Age, Max Reaction Time" << std::endl;
 					for (unsigned long i = 0; i < task_chains.size(); ++i) {
-						ss << task_chains[i].get_id() << ", "
-						   << results.data_ages[i] << ", "
-						   << results.reaction_times[i] << std::endl;
+						const auto& tc = task_chains[i];
+						auto length = tc.get_tasks().size();
+						ss << tc.get_id() << ", "
+						   << results[i][length - 1].max_data_age << ", "
+						   << results[i][length - 1].max_reaction_time << std::endl;
+					}
+					ss << "---" << std::endl;
+					ss << "Task Chain ID, Task Position, Max Data Age, Max Reaction Time" << std::endl;
+					for (unsigned long i = 0; i < task_chains.size(); ++i) {
+						const auto& tc = task_chains[i];
+						for (unsigned long j = 0; j < tc.get_tasks().size(); ++j) {
+							ss << tc.get_id() << ", "
+							   << j << ", "
+							   << results[i][j].max_data_age << ", "
+							   << results[i][j].max_reaction_time << std::endl;
+						}
 					}
 					return ss;
 				}

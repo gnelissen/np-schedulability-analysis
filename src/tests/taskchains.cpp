@@ -18,6 +18,8 @@
 
 using namespace NP;
 using namespace NP::Global::Taskchains_analysis;
+using tc_data = NP::Global::Taskchains_analysis::Taskchains_sp_data_extension<dtime_t>;
+using tc_prob = NP::Global::Taskchains_analysis::Taskchains_problem_extension<dtime_t>;
 
 static const auto inf = Time_model::constants<dtime_t>::infinity();
 
@@ -286,29 +288,6 @@ TEST_CASE("parse_yaml_task_chain_file - Invalid YAML graceful handling") {
 }
 
 // ===========================
-// Task_chains_result tests
-// ===========================
-
-TEST_CASE("Task_chains_result - Basic structure") {
-    Task_chains_result<dtime_t> result;
-    result.data_ages.resize(3, 0);
-    result.reaction_times.resize(3, 0);
-
-    result.data_ages[0] = 100;
-    result.data_ages[1] = 200;
-    result.data_ages[2] = 300;
-    
-    result.reaction_times[0] = 50;
-    result.reaction_times[1] = 150;
-    result.reaction_times[2] = 250;
-
-    CHECK(result.data_ages.size() == 3);
-    CHECK(result.reaction_times.size() == 3);
-    CHECK(result.data_ages[0] == 100);
-    CHECK(result.reaction_times[2] == 250);
-}
-
-// ===========================
 // Taskchains_problem_extension tests
 // ===========================
 
@@ -445,22 +424,22 @@ TEST_CASE("Taskchains_sp_data_extension - Data age and reaction time submission"
     CHECK(ext.get_max_reaction_time(0) == -1);
 
     // Submit values
-    ext.submit_data_age(0, 100);
-    ext.submit_reaction_time(0, 50);
+    ext.submit_data_age(0,  1, 100);
+    ext.submit_reaction_time(0, 1, 50);
 
     CHECK(ext.get_max_data_age(0) == 100);
     CHECK(ext.get_max_reaction_time(0) == 50);
 
     // Submit larger values - should update
-    ext.submit_data_age(0, 150);
-    ext.submit_reaction_time(0, 75);
+    ext.submit_data_age(0,  1, 150);
+    ext.submit_reaction_time(0, 1, 75);
 
     CHECK(ext.get_max_data_age(0) == 150);
     CHECK(ext.get_max_reaction_time(0) == 75);
 
     // Submit smaller values - should not update (we keep max)
-    ext.submit_data_age(0, 50);
-    ext.submit_reaction_time(0, 25);
+    ext.submit_data_age(0, 1, 50);
+    ext.submit_reaction_time(0, 1, 25);
 
     CHECK(ext.get_max_data_age(0) == 150);
     CHECK(ext.get_max_reaction_time(0) == 75);
@@ -481,10 +460,10 @@ TEST_CASE("Taskchains_sp_data_extension - Multiple chains data tracking") {
 
     Taskchains_sp_data_extension<dtime_t> ext(jobs, chains);
 
-    ext.submit_data_age(0, 100);
-    ext.submit_data_age(1, 200);
-    ext.submit_reaction_time(0, 50);
-    ext.submit_reaction_time(1, 75);
+    ext.submit_data_age(0,  2, 100);
+    ext.submit_data_age(1,  2, 200);
+    ext.submit_reaction_time(0, 2, 50);
+    ext.submit_reaction_time(1, 2, 75);
 
     CHECK(ext.get_max_data_age(0) == 100);
     CHECK(ext.get_max_data_age(1) == 200);
@@ -517,10 +496,12 @@ TEST_CASE("Taskchains_sp_data_extension - Results structure") {
     Taskchains_sp_data_extension<dtime_t> ext(jobs, chains);
 
     const auto& results = ext.get_results();
-    CHECK(results.data_ages.size() == 1);
-    CHECK(results.reaction_times.size() == 1);
-    CHECK(results.data_ages[0] == -1);
-    CHECK(results.reaction_times[0] == -1);
+    CHECK(results.size() == 1);
+    CHECK(results[0].size() == 2);
+    CHECK(results[0][0].max_data_age == -1);
+    CHECK(results[0][0].max_reaction_time == -1);
+    CHECK(results[0][1].max_data_age == -1);
+    CHECK(results[0][1].max_reaction_time == -1);
 }
 
 TEST_CASE("Taskchains_sp_data_extension - Large task IDs") {
@@ -593,8 +574,8 @@ TEST_CASE("Taskchains_sp_data_extension - Stress test with many chains") {
     
     // Submit results for all chains
     for (int i = 0; i < n_chains; ++i) {
-        ext.submit_data_age(i, i * 10);
-        ext.submit_reaction_time(i, i * 5);
+        ext.submit_data_age(i, 1, i * 10);
+        ext.submit_reaction_time(i, 1, i * 5);
     }
     
     // Verify
@@ -661,39 +642,40 @@ TEST_CASE("One task per core - single job - no offsets, no prec") {
     chains.push_back(Task_chain<dtime_t>({2}, false, false, 2));
     chains.push_back(Task_chain<dtime_t>({0, 1}, false, false, 3));
     chains.push_back(Task_chain<dtime_t>({0, 1, 2}, false, false, 4));
-    prob_3.problem_extensions.template register_extension<NP::Global::Taskchains_analysis::Taskchains_problem_extension<dtime_t>>(chains);
+    prob_3.problem_extensions.register_extension<tc_prob>(chains);
     Analysis_options opts;
 
     auto space = NP::Global::State_space<dtime_t>::explore(prob_3, opts);
-
-    const auto& results = space->get_results<NP::Global::Taskchains_analysis::Taskchains_sp_data_extension<dtime_t>>();
-    CHECK(results.data_ages.size() == 20);
-    CHECK(results.reaction_times.size() == 20);
+    const auto& results = space->get_results<tc_data>();
+    CHECK(results.size() == 20);
     /** for event inputs **/
     // since a single job of each task is executed, task chains should have no data age and reaction time
     for (size_t i = 0; i < 10; ++i) {
-        CHECK(results.data_ages[i] == -1);
-        CHECK(results.reaction_times[i] == -1);
+        auto p = chains[i].get_tasks().size()-1;
+        CHECK(results[i][p].max_data_age == -1);
+        CHECK(results[i][p].max_reaction_time == -1);
     }
     /** for sensor inputs, instantaneous output **/
     // task chains of a single task have data age and reaction time equal to their execution time
-    CHECK(results.data_ages[10] == 10);
-    CHECK(results.reaction_times[10] == 10);
-    CHECK(results.data_ages[11] == 20);
-    CHECK(results.reaction_times[11] == 20);
-    CHECK(results.data_ages[12] == 30);
-    CHECK(results.reaction_times[12] == 30);
+    CHECK(results[10][0].max_data_age == 10);
+    CHECK(results[10][0].max_reaction_time == 10);
+    CHECK(results[11][0].max_data_age == 20);
+    CHECK(results[11][0].max_reaction_time == 20);
+    CHECK(results[12][0].max_data_age == 30);
+    CHECK(results[12][0].max_reaction_time == 30);
     for (size_t i = 13; i < 15; ++i) {
         // All jobs execute in parallel => they do not exchange data => no data age and reaction time
-        CHECK(results.data_ages[i] == -1);
-        CHECK(results.reaction_times[i] == -1);
+        auto p = chains[i].get_tasks().size()-1;
+        CHECK(results[i][p].max_data_age == -1);
+        CHECK(results[i][p].max_reaction_time == -1);
     }
     /** for sensor inputs, lasting output **/
     // since a single job of each task is executed, task chains should have no data age 
     // but reaction time should be unchanged to instantaneous output case
     for (size_t i = 15; i < 20; ++i) {
-        CHECK(results.data_ages[i] == -1);
-        CHECK(results.reaction_times[i] == results.reaction_times[i - 5]);
+        auto p = chains[i].get_tasks().size()-1;
+        CHECK(results[i][p].max_data_age == -1);
+        CHECK(results[i][p].max_reaction_time == results[i - 5][p].max_reaction_time);
     }
 
     // same with single core
@@ -701,31 +683,33 @@ TEST_CASE("One task per core - single job - no offsets, no prec") {
     prob_1.problem_extensions.template register_extension<NP::Global::Taskchains_analysis::Taskchains_problem_extension<dtime_t>>(chains);
 
     auto space_1 = NP::Global::State_space<dtime_t>::explore(prob_1, opts);
-    const auto& results_1 = space_1->get_results<NP::Global::Taskchains_analysis::Taskchains_sp_data_extension<dtime_t>>();
+    const auto& results_1 = space_1->get_results<tc_data>();
     /** for event inputs **/
     // since a single job of each task is executed, task chains should have no data age and reaction time
     for (size_t i = 0; i < 10; ++i) {
-        CHECK(results_1.data_ages[i] == -1);
-        CHECK(results_1.reaction_times[i] == -1);
+        auto p = chains[i].get_tasks().size()-1;
+        CHECK(results_1[i][p].max_data_age == -1);
+        CHECK(results_1[i][p].max_reaction_time == -1);
     }
     /** for sensor inputs, instantaneous output **/
     // task chains of a single task have data age and reaction time equal to their execution time
-    CHECK(results_1.data_ages[10] == 10);
-    CHECK(results_1.reaction_times[10] == 10);
-    CHECK(results_1.data_ages[11] == 20);
-    CHECK(results_1.reaction_times[11] == 20);
-    CHECK(results_1.data_ages[12] == 30);
-    CHECK(results_1.reaction_times[12] == 30);
-    CHECK(results_1.data_ages[13] == 30); // chain 1->2: data age = exec time of task 1 + exec time of task 2
-    CHECK(results_1.reaction_times[13] == 30);
-    CHECK(results_1.data_ages[14] == 60); // chain 1->2->3: data age = sum of exec times
-    CHECK(results_1.reaction_times[14] == 60);
+    CHECK(results_1[10][0].max_data_age == 10);
+    CHECK(results_1[10][0].max_reaction_time == 10);
+    CHECK(results_1[11][0].max_data_age == 20);
+    CHECK(results_1[11][0].max_reaction_time == 20);
+    CHECK(results_1[12][0].max_data_age == 30);
+    CHECK(results_1[12][0].max_reaction_time == 30);
+    CHECK(results_1[13][1].max_data_age == 30); // chain 1->2: data age = exec time of task 1 + exec time of task 2
+    CHECK(results_1[13][1].max_reaction_time == 30);
+    CHECK(results_1[14][2].max_data_age == 60); // chain 1->2->3: data age = sum of exec times
+    CHECK(results_1[14][2].max_reaction_time == 60);
     /** for sensor inputs, lasting output **/
     // since a single job of each task is executed, task chains should have no data age
     // but reaction time should be unchanged to instantaneous output case
     for (size_t i = 15; i < 20; ++i) {
-        CHECK(results_1.data_ages[i] == -1);
-        CHECK(results_1.reaction_times[i] == results_1.reaction_times[i - 5]);
+        auto p = chains[i].get_tasks().size()-1;
+        CHECK(results_1[i][p].max_data_age == -1);
+        CHECK(results_1[i][p].max_reaction_time == results_1[i - 5][p].max_reaction_time);
     }
 }
 
@@ -762,49 +746,51 @@ TEST_CASE("One task per core - single job with prec constraints") {
     chains.push_back(Task_chain<dtime_t>({2}, false, false, 2));
     chains.push_back(Task_chain<dtime_t>({0, 1}, false, false, 3));
     chains.push_back(Task_chain<dtime_t>({0, 1, 2}, false, false, 4));
-    prob_3.problem_extensions.template register_extension<NP::Global::Taskchains_analysis::Taskchains_problem_extension<dtime_t>>(chains);
+    prob_3.problem_extensions.register_extension<tc_prob>(chains);
     Analysis_options opts;
 
     auto space = NP::Global::State_space<dtime_t>::explore(prob_3, opts);
-    const auto& results = space->get_results<NP::Global::Taskchains_analysis::Taskchains_sp_data_extension<dtime_t>>();
-    CHECK(results.data_ages.size() == 20);
-    CHECK(results.reaction_times.size() == 20);
+    const auto& results = space->get_results<tc_data>();
+    CHECK(results.size() == 20);
 
     /** for event inputs **/
     // since a single job of each task is executed, task chains should have no data age and reaction time
     for (size_t i = 0; i < 10; ++i) {
-        CHECK(results.data_ages[i] == -1);
-        CHECK(results.reaction_times[i] == -1);
+        auto p = chains[i].get_tasks().size()-1;
+        CHECK(results[i][p].max_data_age == -1);
+        CHECK(results[i][p].max_reaction_time == -1);
     }
     /** for sensor inputs, instantaneous output **/
     // task chains of a single task have data age and reaction time equal to their execution time
-    CHECK(results.data_ages[10] == 10);
-    CHECK(results.reaction_times[10] == 10);
-    CHECK(results.data_ages[11] == 20);
-    CHECK(results.reaction_times[11] == 20);
-    CHECK(results.data_ages[12] == 30);
-    CHECK(results.reaction_times[12] == 30);
-    CHECK(results.data_ages[13] == 30); // chain 1->2: data age = exec time of task 1 + exec time of task 2
-    CHECK(results.reaction_times[13] == 30);
-    CHECK(results.data_ages[14] == 60); // chain 1->2->3: data age = sum of exec times
-    CHECK(results.reaction_times[14] == 60);
+    CHECK(results[10][0].max_data_age == 10);
+    CHECK(results[10][0].max_reaction_time == 10);
+    CHECK(results[11][0].max_data_age == 20);
+    CHECK(results[11][0].max_reaction_time == 20);
+    CHECK(results[12][0].max_data_age == 30);
+    CHECK(results[12][0].max_reaction_time == 30);
+    CHECK(results[13][1].max_data_age == 30); // chain 1->2: data age = exec time of task 1 + exec time of task 2
+    CHECK(results[13][1].max_reaction_time == 30);
+    CHECK(results[14][2].max_data_age == 60); // chain 1->2->3: data age = sum of exec times
+    CHECK(results[14][2].max_reaction_time == 60);
     /** for sensor inputs, lasting output **/
     // since a single job of each task is executed, task chains should have no data age
     // but reaction time should be unchanged to instantaneous output case
     for (size_t i = 15; i < 20; ++i) {
-        CHECK(results.data_ages[i] == -1);
-        CHECK(results.reaction_times[i] == results.reaction_times[i - 5]);
+        auto p = chains[i].get_tasks().size()-1;
+        CHECK(results[i][p].max_data_age == -1);
+        CHECK(results[i][p].max_reaction_time == results[i - 5][p].max_reaction_time);
     }
 
     // on single core, nothing should change
     auto prob_1 = NP::Scheduling_problem<dtime_t>(jobs, prec, 1);
-    prob_1.problem_extensions.template register_extension<NP::Global::Taskchains_analysis::Taskchains_problem_extension<dtime_t>>(chains);
+    prob_1.problem_extensions.register_extension<tc_prob>(chains);
 
     auto space_1 = NP::Global::State_space<dtime_t>::explore(prob_1, opts);
-    const auto& results_1 = space_1->get_results<NP::Global::Taskchains_analysis::Taskchains_sp_data_extension<dtime_t>>();
-    for (size_t i = 0; i < results.data_ages.size(); ++i) {
-        CHECK(results_1.data_ages[i] == results.data_ages[i]);
-        CHECK(results_1.reaction_times[i] == results.reaction_times[i]);
+    const auto& results_1 = space_1->get_results<tc_data>();
+    for (size_t i = 0; i < results.size(); ++i) {
+        auto p = chains[i].get_tasks().size()-1;
+        CHECK(results_1[i][p].max_data_age == results[i][p].max_data_age);
+        CHECK(results_1[i][p].max_reaction_time == results[i][p].max_reaction_time);
     }
 }
 
