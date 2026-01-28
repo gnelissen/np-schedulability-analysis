@@ -37,12 +37,15 @@ class Taskchains_state_extension : public State_extension<Time>
 		std::vector<T> data;
 
 		// Offsets into 'data' vector
-		size_t off_est_prev, off_eit_age_int, off_eit_reac_int, off_eit_age_out, off_eit_reac_out;
+		size_t off_est_prev, off_avail, off_eit_age_int, off_eit_reac_int, off_eit_age_out, off_eit_reac_out;
 	public:
 		// accessors to all data arrays embedded in the flattened data vector
-		// EST_prev: Earliest start time of last dispatched source task per chain
+		// EST_prev: Earliest start time of last dispatched job of the source task per chain
 		const T* EST_prev() const { return data.data() + off_est_prev; }
 		T* EST_prev() { return data.data() + off_est_prev; }
+		// LFT_prev: Latest finish time of last dispatched job of the sink task per chain
+		const T* out_availability() const { return data.data() + off_avail; }
+		T* out_availability() { return data.data() + off_avail; }
 		// EIT_Age_int: Earliest Input Time tracking unpropagated reaction (task internal)
 		const T* EIT_Age_int() const { return data.data() + off_eit_age_int; }
 		T* EIT_Age_int() { return data.data() + off_eit_age_int; }
@@ -130,6 +133,8 @@ class Taskchains_state_extension : public State_extension<Time>
 			// Compute layout for data
 			size_t current_offset = 0;
 			off_est_prev = current_offset; 
+			current_offset += n_chains;
+			off_avail = current_offset; 
 			current_offset += n_chains;
 			off_eit_age_int = current_offset; 
 			current_offset += n_total_tasks;
@@ -321,11 +326,11 @@ public:
 		// merge the data 
 		const size_t n = tc_data.num_chains();
 		for (size_t c = 0; c < n; ++c) {
-            if (tc_data.EST_prev()[c] == INVALID && other_data.EST_prev()[c] != INVALID)
-                tc_data.EST_prev()[c] = other_data.EST_prev()[c];
-            else if (tc_data.EST_prev()[c] != INVALID && other_data.EST_prev()[c] != INVALID)
-                tc_data.EST_prev()[c] = std::min(tc_data.EST_prev()[c], other_data.EST_prev()[c]);
-
+			// merge chain-level data
+            tc_data.EST_prev()[c] = min_star(tc_data.EST_prev()[c], other_data.EST_prev()[c]);
+			tc_data.out_availability()[c] = std::max(tc_data.out_availability()[c], other_data.out_availability()[c]);
+			
+			// merge task-level data in the chain
 			size_t len = tc_data.chain_length[c];
             size_t base = tc_data.chain_offset[c];
 			for (size_t t = 0; t < len; ++t) {
@@ -503,9 +508,17 @@ private:
 					tc_data.EIT_Age_int()[task_idx] = EST;
 					tc_data.EIT_Reac_int()[task_idx] = min_star(EST, from.tc_data.EIT_Reac_int()[task_idx]);
 				}
-
-				Time data_age = inst_output ? (LFT - tc_data.EIT_Age_int()[task_idx]) : (LFT - from.tc_data.EIT_Age_int()[task_idx]);
+				// calculate max data age for the task
+				Time data_age;
+				if (inst_output)
+					data_age = LFT - tc_data.EIT_Age_int()[task_idx];
+				else {
+					// time when the output is either erased or overridden by the new output
+					Time max_availability_time = std::min(LFT, tc_data.out_availability()[tc_id]);
+					data_age = max_availability_time - from.tc_data.EIT_Age_int()[task_idx];
+				}
 				space_ext->submit_data_age(tc_id, pos_in_chain, data_age);
+				// calculate max reaction time for the task
 				Time reaction_time = LFT - tc_data.EIT_Reac_int()[task_idx];
 				space_ext->submit_reaction_time(tc_id, pos_in_chain, reaction_time);
 			}
@@ -521,7 +534,15 @@ private:
 				else
 					tc_data.EIT_Age_int()[task_idx] = from.tc_data.EIT_Age_int()[pred_task_idx];
 				
-				Time data_age = inst_output ? (LFT - tc_data.EIT_Age_int()[task_idx]) : (LFT - from.tc_data.EIT_Age_int()[task_idx]);
+				// calculate max data age for the task
+				Time data_age;
+				if (inst_output)
+					data_age = LFT - tc_data.EIT_Age_int()[task_idx];
+				else {
+					// time when the output is either erased or overridden by the new output
+					Time max_availability_time = std::min(LFT, tc_data.out_availability()[tc_id]);
+					data_age = max_availability_time - from.tc_data.EIT_Age_int()[task_idx];
+				}
 				space_ext->submit_data_age(tc_id, pos_in_chain, data_age);
 				
 				// note that `pred_cert_running` is always false if the platform is uniprocessor
@@ -531,12 +552,18 @@ private:
 				else
 					tc_data.EIT_Reac_int()[task_idx] = min_star(from.tc_data.EIT_Reac_int()[task_idx], min_star(from.tc_data.EIT_Reac_out()[pred_task_idx], from.tc_data.EIT_Reac_int()[pred_task_idx]));
 				
+				// calculate max reaction time for the task
 				Time reaction_time = LFT - tc_data.EIT_Reac_int()[task_idx];
 				space_ext->submit_reaction_time(tc_id, pos_in_chain, reaction_time);
 			}
 			
-			if (is_sink)
+			if (is_sink) {
 				tc_data.EIT_Reac_int()[task_idx] = INVALID;
+				Time max_availability_time = LFT + tc.get_output_data_availability();
+				if (max_availability_time < 0) // output data is available until the end of time
+					max_availability_time = Time_model::constants<Time>::infinity();				
+				tc_data.out_availability()[tc_id] = max_availability_time;
+			}
 		}
 	}
 };
