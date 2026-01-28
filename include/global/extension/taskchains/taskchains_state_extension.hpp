@@ -495,8 +495,9 @@ private:
 				tc_data.EST_prev()[tc_id] = EST;
 				if (event_input) {
 					Time EST_prev = from.tc_data.EST_prev()[tc_id];
-					tc_data.EIT_Age_int()[task_idx] = EST_prev;
-					tc_data.EIT_Reac_int()[task_idx] = min_star(EST_prev, from.tc_data.EIT_Reac_int()[task_idx]);
+					Time earliest_possible_event = std::max(EST_prev, EST - tc.get_input_max_interarrival());
+					tc_data.EIT_Age_int()[task_idx] = earliest_possible_event;
+					tc_data.EIT_Reac_int()[task_idx] = min_star(earliest_possible_event, from.tc_data.EIT_Reac_int()[task_idx]);
 				}
 				else {
 					tc_data.EIT_Age_int()[task_idx] = EST;

@@ -118,10 +118,12 @@ TEST_CASE("Task_chain - Duplicate task IDs in chain") {
 
 TEST_CASE("parse_yaml_task_chain_file - Single task chain") {
     std::string yaml_content = R"(
-taskchains:
+TaskChains:
   - Tasks: [1, 2, 3]
-    InputType: event
-    OutputType: active
+    Input:
+        Type: onExternalEvent
+    Output:
+        Type: instantaneous
 )";
     std::istringstream in(yaml_content);
     auto chains = parse_yaml_task_chain_file<dtime_t>(in);
@@ -138,16 +140,22 @@ taskchains:
 
 TEST_CASE("parse_yaml_task_chain_file - Multiple task chains") {
     std::string yaml_content = R"(
-taskchains:
+TaskChains:
   - Tasks: [1, 2]
-    InputType: event
-    OutputType: active
+    Input:
+        Type: onExternalEvent
+    Output:
+        Type: instantaneous
   - Tasks: [3, 4, 5]
-    InputType: sensor
-    OutputType: lasting
+    Input:
+        Type: onStart
+    Output:
+        Type: blackboard
   - Tasks: [6]
-    InputType: event
-    OutputType: lasting
+    Input:
+        Type: onExternalEvent
+    Output:
+        Type: blackboard
 )";
     std::istringstream in(yaml_content);
     auto chains = parse_yaml_task_chain_file<dtime_t>(in);
@@ -172,19 +180,27 @@ taskchains:
 
 TEST_CASE("parse_yaml_task_chain_file - multi-chain with tasks reuse") {
     std::string yaml_content = R"(
-taskchains:
+TaskChains:
   - Tasks: [1]
-    InputType: event
-    OutputType: active
+    Input:
+        Type: onExternalEvent
+    Output:
+        Type: instantaneous
   - Tasks: [1, 2, 2, 1]
-    InputType: sensor
-    OutputType: lasting
+    Input:
+        Type: onStart
+    Output:
+        Type: blackboard
   - Tasks: [2, 3, 4]
-    InputType: event
-    OutputType: active
+    Input:
+        Type: onExternalEvent
+    Output:
+        Type: instantaneous
   - Tasks: [3, 4, 5, 4, 6]
-    InputType: sensor
-    OutputType: lasting
+    Input:
+        Type: onStart
+    Output:
+        Type: blackboard
 )";
     std::istringstream in(yaml_content);
     auto chains = parse_yaml_task_chain_file<dtime_t>(in);
@@ -204,7 +220,7 @@ taskchains:
 
 TEST_CASE("parse_yaml_task_chain_file - Empty file") {
     std::string yaml_content = R"(
-taskchains: []
+TaskChains: []
 )";
     std::istringstream in(yaml_content);
     auto chains = parse_yaml_task_chain_file<dtime_t>(in);
@@ -214,10 +230,12 @@ taskchains: []
 
 TEST_CASE("parse_yaml_task_chain_file - Sensor input types") {
     std::string yaml_content = R"(
-taskchains:
+TaskChains:
   - Tasks: [10, 20, 30]
-    InputType: sensor
-    OutputType: active
+    Input:
+        Type: onStart
+    Output:
+        Type: instantaneous
 )";
     std::istringstream in(yaml_content);
     auto chains = parse_yaml_task_chain_file<dtime_t>(in);
@@ -229,10 +247,12 @@ taskchains:
 
 TEST_CASE("parse_yaml_task_chain_file - Lasting output types") {
     std::string yaml_content = R"(
-taskchains:
+TaskChains:
   - Tasks: [1, 2]
-    InputType: event
-    OutputType: lasting
+    Input:
+        Type: onExternalEvent
+    Output:
+        Type: blackboard
 )";
     std::istringstream in(yaml_content);
     auto chains = parse_yaml_task_chain_file<dtime_t>(in);
@@ -244,10 +264,12 @@ taskchains:
 
 TEST_CASE("parse_yaml_task_chain_file - Large task IDs") {
     std::string yaml_content = R"(
-taskchains:
+TaskChains:
   - Tasks: [1000, 2000, 3000]
-    InputType: event
-    OutputType: active
+    Input:
+        Type: onExternalEvent
+    Output:
+        Type: instantaneous
 )";
     std::istringstream in(yaml_content);
     auto chains = parse_yaml_task_chain_file<dtime_t>(in);
@@ -260,13 +282,17 @@ taskchains:
 
 TEST_CASE("parse_yaml_task_chain_file - Single task chains") {
     std::string yaml_content = R"(
-taskchains:
+TaskChains:
   - Tasks: [1]
-    InputType: event
-    OutputType: active
+    Input:
+        Type: onExternalEvent
+    Output:
+        Type: instantaneous
   - Tasks: [2]
-    InputType: sensor
-    OutputType: lasting
+    Input:
+        Type: onStart
+    Output:
+        Type: blackboard
 )";
     std::istringstream in(yaml_content);
     auto chains = parse_yaml_task_chain_file<dtime_t>(in);

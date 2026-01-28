@@ -20,9 +20,12 @@ namespace NP{
                 const std::vector<unsigned long> tasks;
                 // whether the task chain uses event-triggered input (i.e., task-unrelated events that may happen anytime) or sensor-based input (i.e., input is periodically sensed at the arrival time of the source task) 
                 const bool event_input;
+                // maximum interarrival time of events triggering the input of the chain (only relevant if event_input is true)
+                const Time input_max_interarrival;
                 // whether the task chain uses instantaneous (i.e., valid only when generated) or lasting/blackboard (i.e, valid until output is overridden) output
                 const bool instantaneous_output;
-
+                // maximum data availability for lasting output (only relevant if instantaneous_output is false)
+                const Time output_data_availability;
             public:
                 /**
                  * @brief Constructor
@@ -30,15 +33,21 @@ namespace NP{
                  * @param event_input Boolean indicating if the chain uses event-triggered input
                  * @param instantaneous_output Boolean indicating if the chain uses instantaneous output
                  * @param id Unique identifier for the task chain
+                 * @param i_max_interarrival Maximum interarrival time of events triggering the input of the chain (only relevant if event_input is true)
+                 * @param o_data_availability Maximum data availability for lasting output (only relevant if instantaneous_output is false)
                  */
                 Task_chain(
                     const std::vector<unsigned long>& tasks,
                     const bool& event_input,
                     const bool& instantaneous_output,
-                    const unsigned long id)
-                    : tasks(tasks), event_input(event_input), instantaneous_output(instantaneous_output), id(id)
-                {
-                }
+                    const unsigned long id,
+                    const Time i_max_interarrival = -1,
+                    const Time o_data_availability = -1)
+                    : tasks(tasks), event_input(event_input), instantaneous_output(instantaneous_output), id(id),
+                      input_max_interarrival(event_input && i_max_interarrival >= 0 ? i_max_interarrival : Time_model::constants<Time>::infinity()), 
+                      output_data_availability(!instantaneous_output && o_data_availability >= 0 ? o_data_availability : Time_model::constants<Time>::infinity())
+
+                {}
                 /**
                  * @brief Get the tasks in the task chain
                  */
@@ -52,10 +61,22 @@ namespace NP{
                     return event_input;
                 }
                 /**
+                 * @brief Get the maximum interarrival time of events triggering the input of the chain
+                 */
+                Time get_input_max_interarrival() const {
+                    return input_max_interarrival;
+                }
+                /**
                  * @brief Check if the task chain uses instantaneous output
                  */
                 bool uses_instantaneous_output() const {
                     return instantaneous_output;
+                }
+                /**
+                 * @brief Get the maximum data validity for lasting output
+                 */
+                Time get_output_data_availability() const {
+                    return output_data_availability;
                 }
                 /**
                  * @brief Get the unique identifier of the task chain
@@ -79,21 +100,40 @@ namespace NP{
 
                 try {
                     YAML::Node input_tc_set = YAML::Load(in);
-                    auto const TCs = input_tc_set["taskchains"];
+                    auto const TCs = input_tc_set["TaskChains"];
                     unsigned long chain_id = 0;
                     for (auto const& tc : TCs) {
                         task_ids = tc["Tasks"].as<std::vector<unsigned long>>();
-                        auto inputtype = tc["InputType"].as<std::string>();
-                        auto outputtype = tc["OutputType"].as<std::string>();
-                        //std::cout<<"InputType inited"<<std::endl;
+                        // read input type
+                        auto inputtype = tc["Input"]["Type"].as<std::string>();
+                        if (inputtype != "onExternalEvent" && inputtype != "onStart") {
+                            throw std::runtime_error("Invalid Input Type in task chain definition. Must be 'onExternalEvent' or 'onStart'.");
+                        }
+                        Time input_max_interarrival = -1;
+                        if (inputtype == "onExternalEvent") {
+                            if (tc["Input"]["MaxInterarrival"]) {
+                                input_max_interarrival = tc["Input"]["MaxInterarrival"].as<Time>();
+                            }
+                        }
 
-                        taskchains.push_back(Task_chain<Time>(task_ids, inputtype == "event", outputtype == "active", chain_id));
-                        //std::cout<<"Task chain pushed to vector"<<std::endl;
+                        // read output type
+                        auto outputtype = tc["Output"]["Type"].as<std::string>();
+                        if (outputtype != "instantaneous" && outputtype != "blackboard") {
+                            throw std::runtime_error("Invalid Output Type in task chain definition. Must be 'instantaneous' or 'blackboard'.");
+                        }
+                        Time output_data_availability = -1;
+                        if (outputtype == "blackboard") {
+                            if (tc["Output"]["Availability"]) {
+                                output_data_availability = tc["Output"]["Availability"].as<Time>();
+                            }
+                        }
+
+                        taskchains.push_back(Task_chain<Time>(task_ids, inputtype == "onExternalEvent", outputtype != "blackboard", chain_id, input_max_interarrival, output_data_availability));
                         chain_id++;
                     }
                 }
                 catch (const YAML::Exception& e) {
-                    std::cerr << "Error reading YAML file: " << e.what() << std::endl;
+                    std::cerr << "Error reading task chain YAML file: " << e.what() << std::endl;
                 }
 
                 return taskchains;
