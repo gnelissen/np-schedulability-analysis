@@ -626,10 +626,6 @@ void parse_input_options(const optparse::Values& options, Analysis_config& analy
 		if (!dot_file.empty()) {
 			analysis_config.dot_file = dot_file;
 		}
-		else {
-			std::cerr << "Error: log options file not specified" << std::endl;
-			exit(1);
-		}
 	}
 	else if (options.is_set_by_user("dot_file")) {
 		std::cerr << "Warning: log options are set but log of state graph is not activated ('-g' or '--save-graph' not set). "
