@@ -6,6 +6,7 @@
 #include <memory>
 #include "jobs.hpp"
 #include "precedence.hpp"
+#include "inter_job_constraints.hpp"
 
 namespace NP {
 
@@ -24,14 +25,14 @@ namespace NP {
         std::vector<Incompatible_jobs_set> incompatible_jobs_with_pending_successors;
 
     public:
-        Conditional_dispatch_constraints(const Workload& jobs, const Precedence_constraints<Time>& precs) 
+        Conditional_dispatch_constraints(const Workload& jobs, const Precedence_constraints<Time>& precs, const Inter_job_constraints<Time>& inter_job_constraints) 
             : incompatible_jobs(jobs.size())
             , incompatible_jobs_with_pending_successors(jobs.size())
             , siblings(jobs.size(), nullptr)
         {
             DAG_graph dag = build_graph<Time>(jobs.size(), precs);
             build_siblings(jobs, dag);
-			find_all_incompatible_jobs(dag);
+			find_all_incompatible_jobs(dag, inter_job_constraints);
         }
 
         /**
@@ -103,7 +104,7 @@ namespace NP {
          * @brief Compute incompatible jobs for all jobs in the workload.
          * @param graph The inter-job precedence constraints graph.
          */
-		void find_all_incompatible_jobs(const DAG_graph& graph) {
+		void find_all_incompatible_jobs(const DAG_graph& graph, const Inter_job_constraints<Time>& inter_job_constraints) {
 			const std::size_t n = graph.size();
 			incompatible_jobs.resize(n);
 			for (std::size_t i = 0; i < n; ++i) {
@@ -127,11 +128,16 @@ namespace NP {
 							for (Job_index uj : union_set) {
 								if (sib_descendants[s].count(uj) == 0) {
 									incompatible_jobs[sib_index].emplace(uj);
-                                    // check if uj has pending successors (i.e., one of the successors of uj is a descendant of sibling sib_index)
-                                    for (Job_index succ : graph.successors[uj]) {
-                                        if (sib_descendants[s].count(succ) > 0) {
-                                            incompatible_jobs_with_pending_successors[sib_index].emplace(uj);
-                                            break;
+                                    // check if uj may have pending successors (i.e., one of the successors of uj is a descendant of sib_index or if uj has mutual exclusion constraints)
+                                    const auto& cstr = inter_job_constraints[uj];
+                                    if (cstr.between_executions.size() > 0 || cstr.between_starts.size() > 0)
+                                        incompatible_jobs_with_pending_successors[sib_index].emplace(uj);
+                                    else {
+                                        for (Job_index succ : graph.successors[uj]) {
+                                            if (sib_descendants[s].count(succ) > 0) {
+                                                incompatible_jobs_with_pending_successors[sib_index].emplace(uj);
+                                                break;
+                                            }
                                         }
                                     }
 								}
@@ -140,7 +146,9 @@ namespace NP {
 					} else {
 						// non-conditional siblings have only themselves as incompatible
 						incompatible_jobs[i].emplace(i);
-                        if (graph.successors[i].size() > 0) {
+                        const auto& cstr = inter_job_constraints[i];
+                        // check if i may have pending successors (it has successors or mutual exclusion constraints)
+                        if (graph.successors[i].size() > 0 || cstr.between_executions.size() > 0 || cstr.between_starts.size() > 0) {
                             incompatible_jobs_with_pending_successors[i].emplace(i);
                         }
 					}

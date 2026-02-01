@@ -116,7 +116,7 @@ namespace NP {
 				, must_be_finished_jobs(_must_be_finished_jobs)
 				, _inter_job_constraints(jobs, edges, mutexes)
 				, inter_job_constraints(_inter_job_constraints)
-				, _conditional_dispatch_constraints(jobs, edges)
+				, _conditional_dispatch_constraints(jobs, edges, _inter_job_constraints)
 				, conditional_dispatch_constraints(_conditional_dispatch_constraints)
 				, abort_actions(jobs.size(), NULL)
 			{
