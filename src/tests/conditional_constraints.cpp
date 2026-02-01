@@ -35,7 +35,8 @@ TEST_CASE("conditional siblings are mutually incompatible") {
     precs.emplace_back(JobID(2, 0), JobID(4, 0), Interval<Time>(0, 0), jobs);
     precs.emplace_back(JobID(3, 0), JobID(4, 0), Interval<Time>(0, 0), jobs);
 
-    Conditional_dispatch_constraints<Time> constraints(jobs, precs);
+    Inter_job_constraints<Time> inter_job_constraints(jobs, precs, {});
+    Conditional_dispatch_constraints<Time> constraints(jobs, precs, inter_job_constraints);
 
     CHECK(constraints.has_conditional_siblings(1));
     CHECK(constraints.has_conditional_siblings(2));
@@ -66,7 +67,8 @@ TEST_CASE("all conditional branches exclude one another") {
     precs.emplace_back(JobID(10, 0), JobID(12, 0), Interval<Time>(0, 0), jobs);
     precs.emplace_back(JobID(10, 0), JobID(13, 0), Interval<Time>(0, 0), jobs);
 
-    Conditional_dispatch_constraints<Time> constraints(jobs, precs);
+    Inter_job_constraints<Time> inter_job_constraints(jobs, precs, {});
+    Conditional_dispatch_constraints<Time> constraints(jobs, precs, inter_job_constraints);
     CHECK(constraints.has_conditional_siblings(1));
     CHECK(constraints.has_conditional_siblings(2));
     CHECK(constraints.has_conditional_siblings(3));
@@ -182,7 +184,8 @@ TEST_CASE("complex c-dag incompatible jobs") {
     precs.emplace_back(JobID(9, 0), JobID(11, 0), Interval<Time>(0, 0), jobs);
     precs.emplace_back(JobID(10, 0), JobID(12, 0), Interval<Time>(0, 0), jobs);
 
-    Conditional_dispatch_constraints<Time> constraints(jobs, precs);
+    Inter_job_constraints<Time> inter_job_constraints(jobs, precs, {});
+    Conditional_dispatch_constraints<Time> constraints(jobs, precs, inter_job_constraints);
 
     // Check conditional siblings are correctly identified
     std::set<Job_ref> expected_siblings_1 = {&jobs[2], &jobs[3], &jobs[4]};
