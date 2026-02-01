@@ -312,8 +312,8 @@ public:
 				}
 				else {
 					merged.emplace_back(*b);
-					++b;
 					tasks_with_possibly_running_jobs.add(b->j->get_task_id());
+					++b;
 				}
 			}
 			merged.insert(merged.end(), a, possibly_running_jobs.end());
