@@ -55,10 +55,13 @@ namespace NP {
 			Time next_certain_successor_jobs_dispatch;
 			/** Next time for any source job (either sequential or gang) is certainly released. */
 			Time next_certain_source_job_release;
-			/** Next time a sequential source jobs is certainly released. */
-			Time next_certain_sequential_source_job_release;
-			/** Next time a gang source jobs can certainly be dispatched (i.e., enough cores are certainly available). */
-			Time next_certain_gang_source_job_dispatch;
+			/** Next time a sequential independent jobs is certainly released. */
+			Time next_certain_sequential_independent_job_release;
+			/** Next time a gang independent jobs can certainly be dispatched (i.e., enough cores are certainly available). */
+			Time next_certain_gang_independent_job_dispatch;
+			/** Next time a source job with mutual exclusion can certainly be dispatched (i.e., enough cores are certainly 
+			 * available and mutual exclusion constraints are satisfied). */
+			Time next_certain_mutex_source_job_dispatch;
 			/** Earliest availability of the first core across all states in this node. */
 			Time a_min;
 			/** Latest time when all cores are available across all states in this node. */
@@ -115,8 +118,9 @@ namespace NP {
 				, earliest_potential_release{ 0 }
 				, next_certain_source_job_release{ Time_model::constants<Time>::infinity() }
 				, next_certain_successor_jobs_dispatch{ Time_model::constants<Time>::infinity() }
-				, next_certain_sequential_source_job_release{ Time_model::constants<Time>::infinity() }
-				, next_certain_gang_source_job_dispatch{ Time_model::constants<Time>::infinity() }
+				, next_certain_sequential_independent_job_release{ Time_model::constants<Time>::infinity() }
+				, next_certain_gang_independent_job_dispatch{ Time_model::constants<Time>::infinity() }
+				, next_certain_mutex_source_job_dispatch{ Time_model::constants<Time>::infinity() }
 			{
 			}
 
@@ -133,10 +137,13 @@ namespace NP {
 				, num_jobs_scheduled(0)
 				, earliest_potential_release{ state_space_data.get_earliest_job_arrival() }
 				, next_certain_successor_jobs_dispatch{ Time_model::constants<Time>::infinity() }
-				, next_certain_sequential_source_job_release{ state_space_data.get_earliest_certain_seq_source_job_release() }
-				, next_certain_gang_source_job_dispatch{ Time_model::constants<Time>::infinity() }
+				, next_certain_sequential_independent_job_release{ state_space_data.get_earliest_certain_seq_source_job_release() }
+				, next_certain_gang_independent_job_dispatch{ Time_model::constants<Time>::infinity() }
+				, next_certain_mutex_source_job_dispatch{ Time_model::constants<Time>::infinity() }
 			{
-				next_certain_source_job_release = std::min(next_certain_sequential_source_job_release, state_space_data.get_earliest_certain_gang_source_job_release());
+				next_certain_source_job_release = std::min(next_certain_sequential_independent_job_release, 
+															std::min(state_space_data.get_earliest_certain_gang_independent_job_release(), 
+																		state_space_data.get_earliest_certain_mutex_source_job_release()));
 			}
 
 			/**
@@ -152,15 +159,18 @@ namespace NP {
 				, num_jobs_scheduled(0)
 				, earliest_potential_release{ state_space_data.get_earliest_job_arrival() }
 				, next_certain_successor_jobs_dispatch{ Time_model::constants<Time>::infinity() }
-				, next_certain_sequential_source_job_release{ state_space_data.get_earliest_certain_seq_source_job_release() }
-				, next_certain_gang_source_job_dispatch{ Time_model::constants<Time>::infinity() }
+				, next_certain_sequential_independent_job_release{ state_space_data.get_earliest_certain_seq_source_job_release() }
+				, next_certain_gang_independent_job_dispatch{ Time_model::constants<Time>::infinity() }
+				, next_certain_mutex_source_job_dispatch{ Time_model::constants<Time>::infinity() }
 			{
 				for (const auto& a : proc_initial_state) {
 					a_max = std::max(a_max, a.max());
 					a_min = std::min(a_min, a.min());
 				}
 
-				next_certain_source_job_release = std::min(next_certain_sequential_source_job_release, state_space_data.get_earliest_certain_gang_source_job_release());
+				next_certain_source_job_release = std::min(next_certain_sequential_independent_job_release, 
+															std::min(state_space_data.get_earliest_certain_gang_independent_job_release(), 
+																		state_space_data.get_earliest_certain_mutex_source_job_release()));
 			}
 
 
@@ -184,12 +194,15 @@ namespace NP {
 				, a_min{ 0 }
 				, a_max{ Time_model::constants<Time>::infinity() }
 				, next_certain_successor_jobs_dispatch{ Time_model::constants<Time>::infinity() }
-				, next_certain_gang_source_job_dispatch{ Time_model::constants<Time>::infinity() }
+				, next_certain_gang_independent_job_dispatch{ Time_model::constants<Time>::infinity() }
+				, next_certain_mutex_source_job_dispatch{ Time_model::constants<Time>::infinity() }
 			{
 				earliest_potential_release = state_space_data.earliest_possible_job_release(from.earliest_potential_release, *this);
-				next_certain_sequential_source_job_release = state_space_data.earliest_certain_sequential_source_job_release(from.next_certain_sequential_source_job_release, *this);
-				next_certain_source_job_release = std::min(next_certain_sequential_source_job_release, 
-					state_space_data.earliest_certain_gang_source_job_release(from.next_certain_source_job_release, *this));
+				next_certain_sequential_independent_job_release = state_space_data.earliest_certain_sequential_source_job_release(from.next_certain_sequential_independent_job_release, *this);
+				Time next_certain_gang_indep = state_space_data.earliest_certain_gang_independent_job_release(from.next_certain_source_job_release, *this);
+				Time next_certain_mutex_source = state_space_data.earliest_certain_mutex_source_job_release(from.next_certain_source_job_release, *this);
+				next_certain_source_job_release = std::min(next_certain_sequential_independent_job_release, 
+															std::min(next_certain_gang_indep, next_certain_mutex_source));
 				ready_successor_jobs.update(from.ready_successor_jobs, idx, state_space_data.inter_job_constraints, state_space_data.conditional_dispatch_constraints, scheduled_jobs);
 				jobs_with_pending_successors.update(from.jobs_with_pending_successors, state_space_data.conditional_dispatch_constraints.get_incompatible_jobs_with_pending_successors(idx), state_space_data.inter_job_constraints, this->scheduled_jobs);
 			}
@@ -223,9 +236,12 @@ namespace NP {
 				jobs_with_pending_successors.clear();
 				earliest_potential_release = state_space_data.get_earliest_job_arrival();
 				next_certain_successor_jobs_dispatch = Time_model::constants<Time>::infinity();
-				next_certain_sequential_source_job_release = state_space_data.get_earliest_certain_seq_source_job_release();
-				next_certain_gang_source_job_dispatch = Time_model::constants<Time>::infinity();
-				next_certain_source_job_release = std::min(next_certain_sequential_source_job_release, state_space_data.get_earliest_certain_gang_source_job_release());
+				next_certain_sequential_independent_job_release = state_space_data.get_earliest_certain_seq_source_job_release();
+				next_certain_gang_independent_job_dispatch = Time_model::constants<Time>::infinity();
+				next_certain_mutex_source_job_dispatch = Time_model::constants<Time>::infinity();
+				next_certain_source_job_release = std::min(next_certain_sequential_independent_job_release, 
+															std::min(state_space_data.get_earliest_certain_gang_independent_job_release(), 
+																		state_space_data.get_earliest_certain_mutex_source_job_release()));
 			}
 
 			/**
@@ -250,9 +266,12 @@ namespace NP {
 				jobs_with_pending_successors.clear();
 				earliest_potential_release = state_space_data.get_earliest_job_arrival();
 				next_certain_successor_jobs_dispatch = Time_model::constants<Time>::infinity();
-				next_certain_sequential_source_job_release = state_space_data.get_earliest_certain_seq_source_job_release();
-				next_certain_gang_source_job_dispatch = Time_model::constants<Time>::infinity();
-				next_certain_source_job_release = std::min(next_certain_sequential_source_job_release, state_space_data.get_earliest_certain_gang_source_job_release());
+				next_certain_sequential_independent_job_release = state_space_data.get_earliest_certain_seq_source_job_release();
+				next_certain_gang_independent_job_dispatch = Time_model::constants<Time>::infinity();
+				next_certain_mutex_source_job_dispatch = Time_model::constants<Time>::infinity();
+				next_certain_source_job_release = std::min(next_certain_sequential_independent_job_release, 
+															std::min(state_space_data.get_earliest_certain_gang_independent_job_release(), 
+																		state_space_data.get_earliest_certain_mutex_source_job_release()));
 			}
 
 			/**
@@ -282,10 +301,13 @@ namespace NP {
 				a_max = Time_model::constants<Time>::infinity();
 				earliest_potential_release = state_space_data.earliest_possible_job_release(from.earliest_potential_release, *this);
 				next_certain_successor_jobs_dispatch = Time_model::constants<Time>::infinity();
-				next_certain_sequential_source_job_release = state_space_data.earliest_certain_sequential_source_job_release(from.next_certain_sequential_source_job_release, *this);
-				next_certain_source_job_release = std::min(next_certain_sequential_source_job_release, 
-					state_space_data.earliest_certain_gang_source_job_release(from.next_certain_source_job_release, *this));
-				next_certain_gang_source_job_dispatch = Time_model::constants<Time>::infinity();
+				next_certain_sequential_independent_job_release = state_space_data.earliest_certain_sequential_source_job_release(from.next_certain_sequential_independent_job_release, *this);
+				Time certain_gang_indep_release = state_space_data.earliest_certain_gang_independent_job_release(from.next_certain_source_job_release, *this);
+				Time cetain_mutex_source_release = state_space_data.earliest_certain_mutex_source_job_release(from.next_certain_source_job_release, *this);
+				next_certain_source_job_release = std::min(next_certain_sequential_independent_job_release, 
+															std::min(certain_gang_indep_release, cetain_mutex_source_release));
+				next_certain_gang_independent_job_dispatch = Time_model::constants<Time>::infinity();
+				next_certain_mutex_source_job_dispatch = Time_model::constants<Time>::infinity();
 				ready_successor_jobs.update(from.ready_successor_jobs, idx, state_space_data.inter_job_constraints, state_space_data.conditional_dispatch_constraints, scheduled_jobs);
 				jobs_with_pending_successors.update(from.jobs_with_pending_successors, state_space_data.conditional_dispatch_constraints.get_incompatible_jobs_with_pending_successors(idx), state_space_data.inter_job_constraints, this->scheduled_jobs);
 			}
@@ -312,9 +334,9 @@ namespace NP {
 			}
 
 			/** @brief Next certain sequential source job release time. */
-			Time get_next_certain_sequential_source_job_release() const
+			Time get_next_certain_sequential_independent_job_release() const
 			{
-				return next_certain_sequential_source_job_release;
+				return next_certain_sequential_independent_job_release;
 			}
 
 			/** 
@@ -323,8 +345,9 @@ namespace NP {
 			Time next_certain_job_ready_time() const
 			{
 				return std::min(next_certain_successor_jobs_dispatch,
-					std::min(next_certain_sequential_source_job_release,
-						next_certain_gang_source_job_dispatch));
+							std::min(next_certain_sequential_independent_job_release,
+									std::min(next_certain_gang_independent_job_dispatch, 
+										next_certain_mutex_source_job_dispatch)));
 			}
 
 			/** 
@@ -567,7 +590,8 @@ namespace NP {
 							a_max = std::max(a_max, s.core_availability(num_cpus).max());
 							//update the certain next job ready time
 							next_certain_successor_jobs_dispatch = std::max(next_certain_successor_jobs_dispatch, s.next_certain_successor_jobs_dispatch());
-							next_certain_gang_source_job_dispatch = std::max(next_certain_gang_source_job_dispatch, s.next_certain_gang_source_job_dispatch());
+							next_certain_gang_independent_job_dispatch = std::max(next_certain_gang_independent_job_dispatch, s.next_certain_gang_independent_job_dispatch());
+							next_certain_mutex_source_job_dispatch = std::max(next_certain_mutex_source_job_dispatch, s.next_certain_mutex_source_job_dispatch());
 
 							result = true;
 
@@ -616,13 +640,15 @@ namespace NP {
 					a_min = ft.min();
 					a_max = s->core_availability(num_cpus).max();
 					next_certain_successor_jobs_dispatch = s->next_certain_successor_jobs_dispatch();
-					next_certain_gang_source_job_dispatch = s->next_certain_gang_source_job_dispatch();
+					next_certain_gang_independent_job_dispatch = s->next_certain_gang_independent_job_dispatch();
+					next_certain_mutex_source_job_dispatch = s->next_certain_mutex_source_job_dispatch();
 				}
 				else {
 					a_min = std::min(a_min, ft.min());
 					a_max = std::max(a_max, s->core_availability(num_cpus).max());
 					next_certain_successor_jobs_dispatch = std::max(next_certain_successor_jobs_dispatch, s->next_certain_successor_jobs_dispatch());
-					next_certain_gang_source_job_dispatch = std::max(next_certain_gang_source_job_dispatch, s->next_certain_gang_source_job_dispatch());
+					next_certain_gang_independent_job_dispatch = std::max(next_certain_gang_independent_job_dispatch, s->next_certain_gang_independent_job_dispatch());
+					next_certain_mutex_source_job_dispatch = std::max(next_certain_mutex_source_job_dispatch, s->next_certain_mutex_source_job_dispatch());
 				}
 			}
 

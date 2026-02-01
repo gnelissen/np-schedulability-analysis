@@ -49,8 +49,9 @@ namespace NP {
 			// core availability intervals
 			Core_availability_tracker<Time> core_avail;
 
-			// keeps track of the earliest time a job with at least one predecessor is certainly ready and certainly has enough free cores to start executing
-			// and the earliest time a gang source job (a job with no predecessor that requires more than one core to execute) 
+			// keeps track of the earliest time a job with at least one predecessor or mutual exclusion constraint is certainly ready 
+			// and certainly has enough free cores to start executing,
+			// and the earliest time a gang independent job (a job with no predecessor that requires more than one core to execute) 
 			// is certainly arrived and certainly has enough free cores to start executing
 			Certain_dispatch_times_tracker<Time> certain_dispatch_times;
 			
@@ -84,7 +85,7 @@ namespace NP {
 			 */
 			Schedule_state(const unsigned int num_processors, const State_space_data<Time>& state_space_data)
 				: core_avail{ num_processors }
-				, certain_dispatch_times{ state_space_data.get_earliest_certain_gang_source_job_release(),  Time_model::constants<Time>::infinity()}
+				, certain_dispatch_times{ state_space_data.get_earliest_certain_gang_independent_job_release(), state_space_data.get_earliest_certain_mutex_source_job_release(), Time_model::constants<Time>::infinity()}
 #ifdef CONFIG_ANALYSIS_EXTENSIONS
 				, extensions(state_space_data.get_state_extension_registry())
 #endif
@@ -110,7 +111,7 @@ namespace NP {
 			 */
 			Schedule_state(const std::vector<Interval<Time>>& proc_initial_state, const State_space_data<Time>& state_space_data)
 				: core_avail{ proc_initial_state }
-				, certain_dispatch_times{ state_space_data.get_earliest_certain_gang_source_job_release(),  Time_model::constants<Time>::infinity()}
+				, certain_dispatch_times{ state_space_data.get_earliest_certain_gang_independent_job_release(), state_space_data.get_earliest_certain_mutex_source_job_release(), Time_model::constants<Time>::infinity()}
 #ifdef CONFIG_ANALYSIS_EXTENSIONS
 				, extensions(state_space_data.get_state_extension_registry())
 #endif
@@ -203,7 +204,7 @@ namespace NP {
 			void reset(const unsigned int num_processors, const State_space_data<Time>& state_space_data)
 			{
 				core_avail.reset(num_processors);
-				certain_dispatch_times.reset(state_space_data.get_earliest_certain_gang_source_job_release(), Time_model::constants<Time>::infinity());
+				certain_dispatch_times.reset(state_space_data.get_earliest_certain_gang_independent_job_release(), state_space_data.get_earliest_certain_mutex_source_job_release(), Time_model::constants<Time>::infinity());
 				job_start_times.clear();
 				job_finish_times.clear();
 				certain_running_jobs.clear();
@@ -231,7 +232,7 @@ namespace NP {
 			void reset(const std::vector<Interval<Time>>& proc_initial_state, const State_space_data<Time>& state_space_data)
 			{
 				core_avail.reset(proc_initial_state);
-				certain_dispatch_times.reset(state_space_data.get_earliest_certain_gang_source_job_release(), Time_model::constants<Time>::infinity());
+				certain_dispatch_times.reset(state_space_data.get_earliest_certain_gang_independent_job_release(), state_space_data.get_earliest_certain_mutex_source_job_release(), Time_model::constants<Time>::infinity());
 				job_start_times.clear();
 				job_finish_times.clear();
 				certain_running_jobs.clear();
@@ -406,21 +407,24 @@ namespace NP {
 			}
 
 			/**
-			 * @brief Get earliest time at which a gang source job is certainly
-			 *        dispatchable.
-			 *
-			 * @return The earliest certain dispatch time for gang source jobs.
+			 * @brief Get earliest time at which a gang independent job is certainly dispatchable.
 			 */
-			Time next_certain_gang_source_job_dispatch() const
+			Time next_certain_gang_independent_job_dispatch() const
 			{
-				return certain_dispatch_times.get_gang_source_dispatch_time();
+				return certain_dispatch_times.get_gang_independent_dispatch_time();
 			}
 
 			/**
-			 * @brief Get earliest time at which successor jobs are certainly
-			 *        dispatchable.
-			 *
-			 * @return The earliest certain dispatch time for successor jobs.
+			 * @brief Get earliest time at which a source job with mutual
+			 *        exclusion constraints is certainly dispatchable.
+			 */
+			Time next_certain_mutex_source_job_dispatch() const
+			{
+				return certain_dispatch_times.get_mutex_source_dispatch_time();
+			}
+
+			/**
+			 * @brief Get earliest time at which successor jobs are certainly dispatchable.
 			 */
 			Time next_certain_successor_jobs_dispatch() const
 			{

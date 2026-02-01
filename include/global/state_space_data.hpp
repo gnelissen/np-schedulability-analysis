@@ -47,16 +47,21 @@ namespace NP {
 			// various job maps sorted by time for quick access
 			// not touched after initialization
 			By_time_map _successor_jobs_by_latest_arrival;
-			By_time_map _sequential_source_jobs_by_latest_arrival;
-			By_time_map _gang_source_jobs_by_latest_arrival;
+			By_time_map _sequential_independent_jobs_by_latest_arrival;
+			By_time_map _gang_independent_jobs_by_latest_arrival;
+			By_time_map _mutex_source_jobs_by_latest_arrival;
 			By_time_map _jobs_by_earliest_arrival;
 			By_time_map _jobs_by_deadline;
 			// for each job, the set of jobs that must be finished before starting it
 			std::vector<Job_precedence_set> _must_be_finished_jobs;
+			// ======================
+			/** **CRITICAL: ORDERING CONSTRAINT:** DO NOT CHANGE DECLARATION ORDER 
+			 * _inter_job_constraints must be initialized before _conditional_dispatch_constraints */
 			// inter-job constraints for all jobs in the workload
 			Inter_job_constraints<Time> _inter_job_constraints;
 			// conditional dispatch constraints for all jobs in the workload (conditional siblings, incompatible jobs)
 			Conditional_dispatch_constraints<Time> _conditional_dispatch_constraints;
+			// ======================
 			// list of actions when a job is aborted
 			std::vector<const Abort_action<Time>*> abort_actions;
 
@@ -76,8 +81,9 @@ namespace NP {
 			const By_time_map& jobs_by_earliest_arrival;
 			const By_time_map& jobs_by_deadline;
 			const By_time_map& successor_jobs_by_latest_arrival;
-			const By_time_map& sequential_source_jobs_by_latest_arrival;
-			const By_time_map& gang_source_jobs_by_latest_arrival;
+			const By_time_map& sequential_independent_jobs_by_latest_arrival;
+			const By_time_map& gang_independent_jobs_by_latest_arrival;
+			const By_time_map& mutex_source_jobs_by_latest_arrival;
 			const std::vector<Job_precedence_set>& must_be_finished_jobs;
 			const Inter_job_constraints<Time>& inter_job_constraints;
 			const Conditional_dispatch_constraints<Time>& conditional_dispatch_constraints;
@@ -101,8 +107,9 @@ namespace NP {
 				: jobs(jobs)
 				, num_cpus(num_cpus)
 				, successor_jobs_by_latest_arrival(_successor_jobs_by_latest_arrival)
-				, sequential_source_jobs_by_latest_arrival(_sequential_source_jobs_by_latest_arrival)
-				, gang_source_jobs_by_latest_arrival(_gang_source_jobs_by_latest_arrival)
+				, sequential_independent_jobs_by_latest_arrival(_sequential_independent_jobs_by_latest_arrival)
+				, mutex_source_jobs_by_latest_arrival(_mutex_source_jobs_by_latest_arrival)
+				, gang_independent_jobs_by_latest_arrival(_gang_independent_jobs_by_latest_arrival)
 				, jobs_by_earliest_arrival(_jobs_by_earliest_arrival)
 				, jobs_by_deadline(_jobs_by_deadline)
 				, _must_be_finished_jobs(jobs.size())
@@ -134,12 +141,16 @@ namespace NP {
 					if (job_constraints.predecessors_finish_to_start.size() > 0 || job_constraints.predecessors_start_to_start.size() > 0) {
 						_successor_jobs_by_latest_arrival.insert({ j.latest_arrival(), &j });
 					}
+					else if (job_constraints.between_starts.size() > 0 || job_constraints.between_executions.size() > 0) {
+						_mutex_source_jobs_by_latest_arrival.insert({ j.latest_arrival(), &j });
+						_jobs_by_earliest_arrival.insert({ j.earliest_arrival(), &j });
+					}
 					else if (j.get_min_parallelism() == 1) {
-						_sequential_source_jobs_by_latest_arrival.insert({ j.latest_arrival(), &j });
+						_sequential_independent_jobs_by_latest_arrival.insert({ j.latest_arrival(), &j });
 						_jobs_by_earliest_arrival.insert({ j.earliest_arrival(), &j });
 					}
 					else {
-						_gang_source_jobs_by_latest_arrival.insert({ j.latest_arrival(), &j });
+						_gang_independent_jobs_by_latest_arrival.insert({ j.latest_arrival(), &j });
 						_jobs_by_earliest_arrival.insert({ j.earliest_arrival(), &j });
 					}					
 					_jobs_by_deadline.insert({ j.get_deadline(), &j });
@@ -265,8 +276,8 @@ namespace NP {
 					if (!dispatched(n, *excl.reference_job))
 						continue; // doesn't constrain anything if the other job is not dispatched yet
 					Interval<Time> ft{ 0, 0 };
-					bool has_ft = s.get_start_times(excl.reference_job->get_job_index(), ft);
-					assert(has_ft); // start times must be available for dispatched jobs
+					bool has_ft = s.get_finish_times(excl.reference_job->get_job_index(), ft);
+					assert(has_ft); // finish times must be available for dispatched jobs
 					r.lower_bound(ft.min() + excl.delay.min());
 					r.extend_to(ft.max() + excl.delay.max());
 				}
@@ -509,30 +520,30 @@ namespace NP {
 			}
 
 			/** 
-			 * @brief Find next time by which a sequential source job (i.e., a job without predecessors that can execute on a single core) 
-			 *		 of higher priority than the reference_job is certainly released in any state in the node 'n'. The release time
-			 *		 is searched within the interval [0, until).
+			 * @brief Find next time by which a sequential independent job (i.e., a job without predecessors or mutual exclusion that can 
+			 * 		 execute on a single core) of higher priority than the reference_job is certainly released in any state in the 
+			 * 		 node 'n'. The release time is searched within the interval [0, until).
 			 * 
-			 * Calculate: min{ until, min_{j \in SeqSourceJobs, prio(j) > prio(reference_job)} { r^max(j) } }
+			 * Calculate: min{ until, min_{j \in SeqIndependentJobs, prio(j) > prio(reference_job)} { r^max(j) } }
 			 *
 			 * @param n The node in which to search for the next release time.
 			 * @param reference_job The job whose priority is used as reference.
 			 * @param until Upper bound on the time interval in which to search.
-			 * @return The next time by which a sequential source job of higher priority than the reference_job is certainly released.
+			 * @return The next time by which a sequential independent job of higher priority than the reference_job is certainly released.
 			 */
-			Time next_certain_higher_priority_seq_source_job_release(
+			Time next_certain_higher_priority_seq_independent_job_release(
 				const Node& n,
 				const Job<Time>& reference_job,
 				Time until = Time_model::constants<Time>::infinity()) const
 			{
 				Time when = until;
 
-				// a higher priority source job cannot be released before 
+				// a higher priority source job (i.e., without predecessors) cannot be released before 
 				// a source job of any priority is released
 				Time t_earliest = n.get_next_certain_source_job_release();
 
-				for (auto it = sequential_source_jobs_by_latest_arrival.lower_bound(t_earliest);
-					it != sequential_source_jobs_by_latest_arrival.end(); it++)
+				for (auto it = sequential_independent_jobs_by_latest_arrival.lower_bound(t_earliest);
+					it != sequential_independent_jobs_by_latest_arrival.end(); it++)
 				{
 					const Job<Time>& j = *(it->second);
 
@@ -541,6 +552,7 @@ namespace NP {
 						break; // yep, nothing can lower 'when' at this point
 
 					// j is not relevant if it is already scheduled or not of higher priority
+					// we also ignore jobs with exclusion constraints
 					if (not_dispatched(n, j) && j.higher_priority_than(reference_job))
 					{
 						when = j.latest_arrival();
@@ -553,12 +565,12 @@ namespace NP {
 			}
 
 			/**
-			 * @brief Assuming that `reference_job` is dispatched next on ncores, find the next time by which a gang source job (i.e., 
-			 * 		  a job without predecessors that cannot execute on a single core)  of higher priority than the reference_job is 
+			 * @brief Assuming that `reference_job` is dispatched next on ncores, find the next time by which a gang independent job (i.e., 
+			 * 		  a job without predecessors or mutual exclusion that cannot execute on a single core)  of higher priority than the reference_job is 
 			 * 		  certainly released in state 's' of node 'n' and may interfere with the reference_job. 
 			 * 		  The release time is searched within the interval [lower_bound, until).
 			 * 
-			 * Calculate: min{ until, min_{j \in GangSourceJobs, prio(j) > prio(reference_job)} { \rho^max(j,s) }
+			 * Calculate: min{ until, min_{j \in GangIndependentJobs, prio(j) > prio(reference_job)} { \rho^max(j,s) }
 			 * 			  where \rho^max(j,s) = \begin{cases}
 			 * 										max( r^max(j), A^max_p^min(j)(s) ) } & if p^min(j) > ncores \\
 			 * 										r^max(j) & otherwise
@@ -571,7 +583,7 @@ namespace NP {
 			 * @param lower_bound A lower bound on the time interval in which to search.
 			 * @param until An upper bound on the time interval in which to search.
 			 */
-			Time next_certain_higher_priority_gang_source_job_ready_time(
+			Time next_certain_higher_priority_gang_independent_job_ready_time(
 				const Node& n,
 				const State& s,
 				const Job<Time>& reference_job,
@@ -582,12 +594,12 @@ namespace NP {
 				assert(lower_bound < until);
 				Time when = until;
 
-				// a higher priority source job cannot be released before 
+				// a higher priority source job (i.e., without predecessors) cannot be released before 
 				// a source job of any priority is released
 				Time t_earliest = n.get_next_certain_source_job_release();
 
-				for (auto it = gang_source_jobs_by_latest_arrival.lower_bound(t_earliest);
-					it != gang_source_jobs_by_latest_arrival.end(); it++)
+				for (auto it = gang_independent_jobs_by_latest_arrival.lower_bound(t_earliest);
+					it != gang_independent_jobs_by_latest_arrival.end(); it++)
 				{
 					const Job<Time>& j = *(it->second);
 
@@ -687,6 +699,57 @@ namespace NP {
 			}
 
 			/**
+			 * @brief Assuming that `reference_job` is dispatched next on ncores, find the next time by which a source mutex job (i.e., 
+			 * 		  a job without predecessors but with mutual exclusion constraints) of higher priority than the reference_job is 
+			 * 		  certainly ready in system state 's' of node 'n'. 
+			 * 		  The release time is searched within the interval [lower_bound, until).
+			 * 
+			 * Calculate: min{ until, min_{j \in MutexJobs, prio(j) > prio(reference_job)} { R^max(k|reference_job,s) }
+			 * 			  where R^max(k|reference_job,s) is the latest ready time of job k in state s knowing that `reference_job` is dispatched next on ncores.
+			 * 
+			 * @param n The node state s belongs to.
+			 * @param s The state in which to search for the next release time.
+			 * @param reference_job The job whose priority is used as reference.
+			 * @param ncores The number of cores on which the reference_job is dispatched.
+			 * @param lower_bound A lower bound on the time interval in which to search.
+			 * @param until An upper bound on the time interval in which to search.
+			 */
+			Time next_certain_higher_priority_mutex_job_ready_time(
+				const Node& n,
+				const State& s,
+				const Job<Time>& reference_job,
+				const unsigned int ncores,
+				Time lower_bound,
+				Time until = Time_model::constants<Time>::infinity()) const
+			{
+				assert(lower_bound < until);
+				Time when = until;
+				auto ref_job_index = reference_job.get_job_index();
+
+				// a higher priority source job (i.e., without predecessors) cannot be released before 
+				// a source job of any priority is released
+				Time t_earliest = n.get_next_certain_source_job_release();
+
+				for (auto it = mutex_source_jobs_by_latest_arrival.lower_bound(t_earliest);
+					it != mutex_source_jobs_by_latest_arrival.end(); it++)
+				{
+					const Job<Time>& j = *(it->second);
+
+					// check if we can stop looking
+					if (when < j.latest_arrival())
+						break; // nothing can lower 'when' at this point
+
+					// j is not relevant if it is already scheduled or not of higher priority
+					if (not_dispatched(n, j) && j.higher_priority_than(reference_job)) {
+						when = std::min(when, conditional_latest_ready_time(n, s, j, ref_job_index, ncores));
+						if (when <= lower_bound) 
+							break;
+					}
+				}
+				return when;
+			}
+
+			/**
 			 * @brief Find the earliest possible job release of all jobs at or after time 'after'
 			 * @param after time after which to search for the earliest possible job release
 			 * @param n the node in which to search
@@ -716,8 +779,8 @@ namespace NP {
 			 */
 			Time earliest_certain_sequential_source_job_release(Time after, const Node& n) const
 			{
-				for (auto it = sequential_source_jobs_by_latest_arrival.lower_bound(after);
-					it != sequential_source_jobs_by_latest_arrival.end(); it++)
+				for (auto it = sequential_independent_jobs_by_latest_arrival.lower_bound(after);
+					it != sequential_independent_jobs_by_latest_arrival.end(); it++)
 				{
 					const Job<Time>* jp = it->second;
 					// skip if the job was dispatched already
@@ -736,10 +799,30 @@ namespace NP {
 			 * @param after time after which to search for the earliest certain gang source job release
 			 * @param n the node in which to search
 			 */
-			Time earliest_certain_gang_source_job_release(Time after, const Node& n) const
+			Time earliest_certain_gang_independent_job_release(Time after, const Node& n) const
 			{
-				for (auto it = gang_source_jobs_by_latest_arrival.lower_bound(after);
-					it != gang_source_jobs_by_latest_arrival.end(); it++)
+				for (auto it = gang_independent_jobs_by_latest_arrival.lower_bound(after);
+					it != gang_independent_jobs_by_latest_arrival.end(); it++)
+				{
+					const Job<Time>* jp = it->second;
+					// skip if the job was dispatched already
+					if (dispatched(n, *jp))
+						continue;
+					// the job was not dispatched yet => found the earliest since jobs are ordered by latest arrival
+					return jp->latest_arrival();
+				}
+				return Time_model::constants<Time>::infinity();
+			}
+
+			/** 
+			 * @brief Find the earliest certain job release of all mutex source jobs at or after time 'after'
+			 * @param after time after which to search for the earliest certain mutex source job release
+			 * @param n the node in which to search
+			 */
+			Time earliest_certain_mutex_source_job_release(Time after, const Node& n) const
+			{
+				for (auto it = mutex_source_jobs_by_latest_arrival.lower_bound(after);
+					it != mutex_source_jobs_by_latest_arrival.end(); it++)
 				{
 					const Job<Time>* jp = it->second;
 					// skip if the job was dispatched already
@@ -769,21 +852,32 @@ namespace NP {
 			 */
 			Time get_earliest_certain_seq_source_job_release() const
 			{
-				if (sequential_source_jobs_by_latest_arrival.empty())
+				if (sequential_independent_jobs_by_latest_arrival.empty())
 					return Time_model::constants<Time>::infinity();
 				else
-					return sequential_source_jobs_by_latest_arrival.begin()->first;
+					return sequential_independent_jobs_by_latest_arrival.begin()->first;
 			}
 
 			/**
 			 * @brief Get the earliest certain release time among all **gang** *source* jobs when the system starts.
 			 */
-			Time get_earliest_certain_gang_source_job_release() const
+			Time get_earliest_certain_gang_independent_job_release() const
 			{
-				if (gang_source_jobs_by_latest_arrival.empty())
+				if (gang_independent_jobs_by_latest_arrival.empty())
 					return Time_model::constants<Time>::infinity();
 				else
-					return gang_source_jobs_by_latest_arrival.begin()->first;
+					return gang_independent_jobs_by_latest_arrival.begin()->first;
+			}
+
+			/**
+			 * @brief Get the earliest certain release time among all *mutex* *source* jobs when the system starts.
+			 */
+			Time get_earliest_certain_mutex_source_job_release() const
+			{
+				if (mutex_source_jobs_by_latest_arrival.empty())
+					return Time_model::constants<Time>::infinity();
+				else
+					return mutex_source_jobs_by_latest_arrival.begin()->first;
 			}
 
 		private:

@@ -669,8 +669,12 @@ namespace NP {
 			}
 
 			// find next time by which a job is certainly ready in system state 's'
-			// return min { min_{ j \in SeqSourceJobs \ Omega(s) } { r^max(j) },
-			//				min_{j \in GangSourceJobs \ Omega(s)} { max{ r^max(j), A^max_p^min(j)(s)) } },
+			// return min { min_{ j \in SeqIndependentJobs \ Omega(s) } { r^max(j) },
+			//				min_{j \in GangIndependentJobs \ Omega(s)} { max{ r^max(j), A^max_p^min(j)(s)) } },
+			//				min_{ j \in MutxSourceJobs \ Omega(s) } { max{	r^max(j), 
+			//											 	  				A^max_p^min(j)(s),
+	  		//					 						 	  				max_{i \in Mutx^s(j) \cup Omega(s)} { ST^max(i) + delay^max(i,j) }, 
+	  		//					 						 	  				max_{i \in Mutx^f(j) \cup Omega(s)} { FT^max(i) + delay^max(i,j) } } },
 			//			  	min_{ j \in R^pot(s)} { max_{sib \in CondSibs(j)} {
 			//											 max{ r^max(j), 
 			//											 	  A^max_p^min(j)(s),
@@ -678,14 +682,19 @@ namespace NP {
 	  		//					 						 	  max_{i \in Pred^f(j)} { FT^max(i) + delay^max(i,j) }, 
 	  		//					 						 	  max_{i \in Mutx^s(j) \cup Omega(s)} { ST^max(i) + delay^max(i,j) }, 
 	  		//					 						 	  max_{i \in Mutx^f(j) \cup Omega(s)} { FT^max(i) + delay^max(i,j) } } } } }
-			// where SeqSourceJobs = { j | Pred(j) = emptyset and p^min(j) = 1 } and GangSourceJobs = { j | Pred(j) = emptyset and p^min(j) > 1 }
+			// where SeqIndependentJobs = { j | Pred(j) = emptyset and Mutx(j) = emptyset and p^min(j) = 1 } and GangIndependentJobs = { j | Pred(j) = emptyset and Mutx(j) = emptyset and p^min(j) > 1 }
 			Time next_certain_job_ready_time(const Node& n, const State& s) const
 			{
-				// calculate min_{ j \in SeqSourceJobs \ Omega(s) } { r^max(j) }
-				Time t_wos = n.get_next_certain_sequential_source_job_release();
-				// calculate the rest of the above equation
-				Time t_ws = std::min(s.next_certain_gang_source_job_dispatch(), s.next_certain_successor_jobs_dispatch());
-				return std::min(t_wos, t_ws);
+				// calculate min_{ j \in SeqIndependentJobs \ Omega(s) } { r^max(j) }
+				Time t_seq = n.get_next_certain_sequential_independent_job_release();
+				// calculate min_{j \in GangIndependentJobs \ Omega(s)} { max{ r^max(j), A^max_p^min(j)(s)) } }
+				Time t_gang = s.next_certain_gang_independent_job_dispatch();
+				// calculate min_{ j \in MutxSourceJobs \ Omega(s) } { ... }
+				Time t_mtx = s.next_certain_mutex_source_job_dispatch();
+				// calculate min_{ j \in R^pot(s)} { ... }
+				Time t_succ = s.next_certain_successor_jobs_dispatch();
+				// take the minimum over all
+				return std::min(t_seq, std::min(t_mtx, std::min(t_gang, t_succ)));
 			}
 
 			/**
@@ -781,13 +790,16 @@ namespace NP {
 						Time est = std::max(rt_min, at_min);
 						
 						// Calculate t_high
+						Time t_high_gang = sp_data.next_certain_higher_priority_gang_independent_job_ready_time(*n, *s, j, p, est, t_wc + 1);
+						if (t_high_gang <= est)
+							continue; // a higher priority gang source job will be dispatched before j can start
+						Time t_high_mutx = sp_data.next_certain_higher_priority_mutex_job_ready_time(*n, *s, j, p, est, t_wc + 1);
+						if (t_high_mutx <= est)
+							continue; // a higher priority mutex-source job will be dispatched before j can start
 						Time t_high_succ = sp_data.next_certain_higher_priority_successor_job_ready_time(*n, *s, j, p, est);
 						if (t_high_succ <= est)
 							continue; // a higher priority successor job will be dispatched before j can start
-						Time t_high_gang = sp_data.next_certain_higher_priority_gang_source_job_ready_time(*n, *s, j, p, est, t_wc + 1);
-						if (t_high_gang <= est)
-							continue; // a higher priority gang source job will be dispatched before j can start
-						Time t_high = std::min(t_high_wos, std::min(t_high_gang, t_high_succ));
+						Time t_high = std::min(t_high_wos, std::min(t_high_gang,  std::min(t_high_mutx, t_high_succ)));
 						// If j can execute on ncores+k cores, then 
 						// the scheduler will start j on ncores only if 
 						// there isn't ncores+k cores available
@@ -924,7 +936,7 @@ namespace NP {
 						continue;
 					// if there is a higher priority job that is certainly ready before job j is released at the earliest, 
 					// then j will never be the next job dispached by the scheduler
-					Time t_high_wos = sp_data.next_certain_higher_priority_seq_source_job_release(*n, j, upbnd_t_wc + 1);
+					Time t_high_wos = sp_data.next_certain_higher_priority_seq_independent_job_release(*n, j, upbnd_t_wc + 1);
 					if (t_high_wos <= j.earliest_arrival())
 						continue;
 
@@ -953,7 +965,7 @@ namespace NP {
 
 					// if there is a higher priority job that is certainly ready before job j is released at the earliest, 
 					// then j will never be the next job dispached by the scheduler
-					Time t_high_wos = sp_data.next_certain_higher_priority_seq_source_job_release(*n, j, upbnd_t_wc + 1);
+					Time t_high_wos = sp_data.next_certain_higher_priority_seq_independent_job_release(*n, j, upbnd_t_wc + 1);
 					if (t_high_wos <= j.earliest_arrival())
 						continue;
 #ifdef CONFIG_PRUNING
