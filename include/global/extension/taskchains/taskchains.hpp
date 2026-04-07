@@ -28,6 +28,10 @@ namespace NP{
                 const bool instantaneous_output;
                 // maximum data availability for lasting output (only relevant if instantaneous_output is false)
                 const Time output_data_availability;
+                // interval of time AFTER a job of the i^th task in the chain is dispatched within which the input data is read
+                const std::vector<Interval<Time>> read_interval;
+                // interval of time BEFORE a job of the i^th task in the chain is completed within which the output data is written
+                const std::vector<Interval<Time>> write_interval;
             public:
                 /**
                  * @brief Constructor
@@ -44,13 +48,16 @@ namespace NP{
                     const bool& event_input,
                     const bool& instantaneous_output,
                     const unsigned long id,
+                    const std::vector<Interval<Time>>& read_interval = {},
+                    const std::vector<Interval<Time>>& write_interval = {},
                     const Time i_max_interarrival = -1,
                     const Time o_data_availability = -1,
                     const std::string& name = "")
                     : tasks(tasks), event_input(event_input), instantaneous_output(instantaneous_output), id(id), name(name),
                       input_max_interarrival(event_input && i_max_interarrival >= 0 ? i_max_interarrival : Time_model::constants<Time>::infinity()), 
-                      output_data_availability(!instantaneous_output && o_data_availability >= 0 ? o_data_availability : Time_model::constants<Time>::infinity())
-
+                      output_data_availability(!instantaneous_output && o_data_availability >= 0 ? o_data_availability : Time_model::constants<Time>::infinity()),
+                      read_interval(read_interval.size() == tasks.size() ? read_interval : std::vector<Interval<Time>>(tasks.size(), Interval<Time>(0,0))),
+                      write_interval(write_interval.size() == tasks.size() ? write_interval : std::vector<Interval<Time>>(tasks.size(), Interval<Time>(0,0)))
                 {}
                 /**
                  * @brief Get the tasks in the task chain
@@ -83,6 +90,22 @@ namespace NP{
                     return output_data_availability;
                 }
                 /**
+                 * @brief Get the read interval for the task at position task_pos in the chain
+                 * @param task_pos Position of the task in the chain
+                 */
+                Interval<Time> get_read_interval(size_t task_pos) const {
+                    assert(task_pos < tasks.size());
+                    return read_interval[task_pos];
+                }
+                /**
+                 * @brief Get the write interval for the task at position task_pos in the chain
+                 * @param task_pos Position of the task in the chain
+                 */
+                Interval<Time> get_write_interval(size_t task_pos) const {
+                    assert(task_pos < tasks.size());
+                    return write_interval[task_pos];
+                }
+                /**
                  * @brief Get the unique identifier of the task chain
                  */
                 unsigned long get_id() const {
@@ -105,43 +128,65 @@ namespace NP{
             std::vector<Task_chain<Time>> parse_yaml_task_chain_file(std::istream& in)
             {
                 std::vector<Task_chain<Time>> taskchains;
-                std::vector<unsigned long> task_ids;
-                std::vector<std::string> buffers;
-
                 try {
                     YAML::Node input_tc_set = YAML::Load(in);
                     auto const TCs = input_tc_set["TaskChains"];
                     unsigned long chain_id = 0;
                     for (auto const& tc : TCs) {
+                        std::vector<unsigned long> task_ids;
+                        std::vector<Interval<Time>> read_intervals;
+                        std::vector<Interval<Time>> write_intervals;
                         std::string tc_name = "";
                         if (tc["ID"])
                             tc_name = tc["ID"].as<std::string>();
-                        task_ids = tc["Tasks"].as<std::vector<unsigned long>>();
-                        // read input type
-                        auto inputtype = tc["Input"]["Type"].as<std::string>();
+                        // parse tasks in the chain
+                        for (auto& t : tc["Tasks"]) {
+                            if (t.IsScalar()) {
+                                task_ids.push_back(t.as<unsigned long>());
+                            }
+                            else {
+                                task_ids.push_back(t["ID"].as<unsigned long>());
+                                read_intervals.push_back(Interval<Time>(
+                                    t["ReadInterval"][0].as<Time>(),
+                                    t["ReadInterval"][1].as<Time>()));
+                                write_intervals.push_back(Interval<Time>(
+                                    t["WriteInterval"][0].as<Time>(),
+                                    t["WriteInterval"][1].as<Time>()));
+                            }                                
+                        }
+                        // read input properties
+                        auto in = tc["Input"];
+                        auto inputtype = in["Type"].as<std::string>();
                         if (inputtype != "onExternalEvent" && inputtype != "onStart") {
                             throw std::runtime_error("Invalid Input Type in task chain definition. Must be 'onExternalEvent' or 'onStart'.");
                         }
                         Time input_max_interarrival = -1;
                         if (inputtype == "onExternalEvent") {
-                            if (tc["Input"]["MaxInterarrival"]) {
-                                input_max_interarrival = tc["Input"]["MaxInterarrival"].as<Time>();
+                            if (in["MaxInterarrival"]) {
+                                input_max_interarrival = in["MaxInterarrival"].as<Time>();
                             }
                         }
+                        read_intervals.push_back(in["ReadInterval"] ? Interval<Time>(
+                            in["ReadInterval"][0].as<Time>(),
+                            in["ReadInterval"][1].as<Time>()) : Interval<Time>(0,0));
 
-                        // read output type
-                        auto outputtype = tc["Output"]["Type"].as<std::string>();
+                        // read output properties
+                        auto out = tc["Output"];
+                        auto outputtype = out["Type"].as<std::string>();
                         if (outputtype != "instantaneous" && outputtype != "blackboard") {
                             throw std::runtime_error("Invalid Output Type in task chain definition. Must be 'instantaneous' or 'blackboard'.");
                         }
                         Time output_data_availability = -1;
                         if (outputtype == "blackboard") {
-                            if (tc["Output"]["Availability"]) {
-                                output_data_availability = tc["Output"]["Availability"].as<Time>();
+                            if (out["Availability"]) {
+                                output_data_availability = out["Availability"].as<Time>();
                             }
                         }
+                        write_intervals.push_back(out["WriteInterval"] ? Interval<Time>(
+                            out["WriteInterval"][0].as<Time>(),
+                            out["WriteInterval"][1].as<Time>()) : Interval<Time>(0,0));
 
-                        taskchains.push_back(Task_chain<Time>(task_ids, inputtype == "onExternalEvent", outputtype != "blackboard", chain_id, input_max_interarrival, output_data_availability, tc_name));
+                        taskchains.push_back(Task_chain<Time>(task_ids, inputtype == "onExternalEvent", outputtype != "blackboard", chain_id, read_intervals, write_intervals, input_max_interarrival, output_data_availability, tc_name));
                         chain_id++;
                     }
                 }

@@ -43,7 +43,7 @@ class Taskchains_state_extension : public State_extension<Time>
 		// EST_prev: Earliest start time of last dispatched job of the source task per chain
 		const T* EST_prev() const { return data.data() + off_est_prev; }
 		T* EST_prev() { return data.data() + off_est_prev; }
-		// LFT_prev: Latest finish time of last dispatched job of the sink task per chain
+		// out_availability: Latest time the data published by the sink task of a chain will be available to use
 		const T* out_availability() const { return data.data() + off_avail; }
 		T* out_availability() { return data.data() + off_avail; }
 		// EIT_Age_int: Earliest Input Time tracking unpropagated reaction (task internal)
@@ -384,15 +384,16 @@ private:
 		possibly_running_jobs.reserve(from.possibly_running_jobs.size() + 1);
 		// add the task of the newly scheduled job j to the possibly running tasks
 		tasks_with_possibly_running_jobs.add(ssd.jobs[j].get_task_id());
-		// add all jobs that were possibly running in the previous state and that are not predecessors of j or certainly finished by the time j starts
-		const auto& preds = ssd.get_finished_jobs_if_starts(j);
+		// add all jobs that were possibly running in the previous state and that are not predecessors of j or have certainly finished by the time j starts
+		//const auto& preds = ssd.get_finished_jobs_if_starts(j);
+		const auto& job_cstr = ssd.inter_job_constraints[j];
 		bool added_j = false;
         for (const auto& pj : from.possibly_running_jobs)
         {
             const auto& running_job = pj.j;
 			auto idx = running_job->get_job_index();
-			// add pj only if it is not a predecessor of j and it is not certainly finished by the time j starts
-            if (std::find(preds.begin(), preds.end(), idx) == preds.end()
+			// add pj only if it has no precedence or mutual exclusion constraint with j and it is not certainly finished by the time j starts
+            if (job_cstr.get_min_delay_after_finish_of(idx) == -1
                 && pj.finish_time.max() >= this_state.core_availability(2).min()
                 && pj.finish_time.max() > start_times.min())
             {
@@ -430,6 +431,28 @@ private:
 				return true;
 		}
 		return false;
+	}
+
+	/**
+	 * @brief Check if a job did certainly not publish its output by time a certain time in the given state
+	 * @param at The time to check against
+	 * @param j The job index to check
+	 * @param tc The task chain the job belongs to
+	 * @param pos_in_chain The position of the job's task in the task chain
+	 * @param state The schedule state to check
+	 * @param state_space_data The state space data
+	 */
+	bool did_certainly_not_publish_output(Time at, Job_index j, const Task_chain<Time>& tc, size_t pos_in_chain, const Schedule_state<Time>& state, const State_space_data<Time>& state_space_data) const {
+		// get finish time of job j
+		Interval<Time> ft;
+		state.get_finish_times(j, ft);
+		// get output write interval of j's task in the task chain
+		Interval<Time> output_interval = tc.get_write_interval(pos_in_chain);
+		// check if the output could have been published by time 'at', if yes, return false
+		Time earliest_pub_time = ft.min() - output_interval.max();
+		if (earliest_pub_time <= at)
+			return false;
+		return true;
 	}
 
 	/**
@@ -476,7 +499,7 @@ private:
 			const auto& tasks = tc.get_tasks();
 			for (size_t k = 0; k < tasks.size(); ++k) {
 				unsigned long tau_l = tasks[k];
-				// note that `may_have_running_job` does not work for uniprocessor platforms
+				// NOTE: `may_have_running_job` does not work for uniprocessor platforms
 				if (tau_l != tau_j && (!multiproc || !may_have_running_job(tau_l))) {
 					tc_data.EIT_Age_out()[pos] = from.tc_data.EIT_Age_int()[pos];
 					tc_data.EIT_Reac_int()[pos] = INVALID;
@@ -527,7 +550,7 @@ private:
 				size_t pred_task_idx = task_idx - 1;
 				tc_data.EIT_Reac_out()[pred_task_idx] = INVALID;
 
-				// note that `pred_pos_running` is always false if the platform is uniprocessor
+				// NOTE: `pred_pos_running` is always false if the platform is uniprocessor since nothing else than tau_j can be running on the single available core
 				bool pred_pos_running = multiproc && may_have_running_job(tasks[pos_in_chain - 1]);
 				if (pred_pos_running)
 					tc_data.EIT_Age_int()[task_idx] = from.tc_data.EIT_Age_out()[pred_task_idx];
@@ -545,7 +568,7 @@ private:
 				}
 				space_ext->submit_data_age(tc_id, pos_in_chain, data_age);
 				
-				// note that `pred_cert_running` is always false if the platform is uniprocessor
+				// NOTE: `pred_cert_running` is always false if the platform is uniprocessor since nothing else than tau_j can be running on the single available core
 				bool pred_cert_running = multiproc && is_certainly_running(tasks[pos_in_chain - 1], new_state, ssd);
 				if (pred_cert_running)
 					tc_data.EIT_Reac_int()[task_idx] = min_star(from.tc_data.EIT_Reac_int()[task_idx], from.tc_data.EIT_Reac_out()[pred_task_idx]);
