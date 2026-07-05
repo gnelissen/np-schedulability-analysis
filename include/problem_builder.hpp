@@ -165,7 +165,10 @@ namespace NP {
 			auto mk_stream = open_file_stream(config.mk_file);
 			
 			auto mk_constraints = NP::Global::MK_analysis::parse_mk_constraints_csv(mk_stream);
-			problem.problem_extensions.template register_extension<NP::Global::MK_analysis::MK_problem_extension>(mk_constraints);
+			if (mk_constraints.empty())
+				std::cerr << "Warning: No mk constraints were parsed from the specified file." << std::endl;
+			else
+				problem.problem_extensions.template register_extension<NP::Global::MK_analysis::MK_problem_extension>(mk_constraints);
 		}
 		if (config.want_task_chains) {
 			if (config.task_chains_file.empty()) {
@@ -180,7 +183,10 @@ namespace NP {
 			auto tc_stream = open_file_stream(config.task_chains_file);
 			
 			auto task_chains = NP::Global::Taskchains_analysis::template parse_yaml_task_chain_file<Time>(tc_stream);
-			problem.problem_extensions.template register_extension<NP::Global::Taskchains_analysis::Taskchains_problem_extension<Time>>(task_chains);
+			if (task_chains.empty())
+				std::cerr << "Warning: No task chains were parsed from the specified file." << std::endl;
+			else
+				problem.problem_extensions.template register_extension<NP::Global::Taskchains_analysis::Taskchains_problem_extension<Time>>(task_chains);
 		}
 	}
 #endif
