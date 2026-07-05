@@ -193,7 +193,7 @@ public:
                    const unsigned int num_processors,
                    const State_space_data<Time>& state_space_data) override
     {
-        auto spd_ext = state_space_data.get_extensions().get<Taskchains_sp_data_extension<Time>>(state_space_data_ext_id);
+        auto spd_ext = state_space_data.get_extensions().template get<Taskchains_sp_data_extension<Time>>(state_space_data_ext_id);
 		tc_data.init(spd_ext->get_task_chains(), state_space_data.get_num_cpus() > 1);
 	}
 
@@ -206,7 +206,7 @@ public:
                    const std::vector<Interval<Time>>& proc_initial_state,
                    const State_space_data<Time>& state_space_data) override
     {
-        auto spd_ext = state_space_data.get_extensions().get<Taskchains_sp_data_extension<Time>>(extension_id);
+        auto spd_ext = state_space_data.get_extensions().template get<Taskchains_sp_data_extension<Time>>(extension_id);
 		tc_data.init(spd_ext->get_task_chains(), state_space_data.get_num_cpus() > 1);
 	}
 
@@ -228,7 +228,7 @@ public:
                    Time next_source_job_rel,
                    unsigned int ncores = 1) override
     {
-		auto from_ext = from.get_extensions().get<Taskchains_state_extension<Time>>(extension_id);
+		auto from_ext = from.get_extensions().template get<Taskchains_state_extension<Time>>(extension_id);
         if (state_space_data.get_num_cpus() > 1)
             update_possibly_running_jobs(new_state, *from_ext, j, start_times, finish_times, state_space_data);
 
@@ -292,7 +292,7 @@ public:
 	 */
 	void merge(size_t extension_id, const Schedule_state<Time>& this_state, const Schedule_state<Time>& other) override {
 		bool multiproc = tc_data.is_multiproc();
-		auto other_ext = other.get_extensions().get<Taskchains_state_extension<Time>>(extension_id);
+		auto other_ext = other.get_extensions().template get<Taskchains_state_extension<Time>>(extension_id);
 		const auto& other_data = other_ext->tc_data;
 		// merge possibly running jobs and tasks (but only if we are analyzing a multiprocessor platform)
 		if (multiproc) {
@@ -483,7 +483,7 @@ private:
 		const State_space_data<Time>& ssd, const Time& EST, const Time&, const Time&, const Time& LFT,
 		const size_t ssd_ext_id, const Schedule_state<Time>& new_state)
 	{
-		auto space_ext = ssd.get_extensions().get<Taskchains_sp_data_extension<Time>>(ssd_ext_id);
+		auto space_ext = ssd.get_extensions().template get<Taskchains_sp_data_extension<Time>>(ssd_ext_id);
 		const auto& chains = space_ext->get_task_chains();
 		const Job<Time>& job = ssd.jobs[idx];
 		const unsigned long tau_j = job.get_task_id();
