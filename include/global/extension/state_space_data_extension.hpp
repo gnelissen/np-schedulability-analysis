@@ -23,6 +23,7 @@ namespace NP {
 			{ 
 				return std::ostringstream(); 
 			}
+			virtual bool success() const { return true; }
 		};
 
 		// Manager for all state space data extensions

@@ -267,6 +267,18 @@ namespace NP {
 				}
 				return data->get_results();
 			}
+
+			/** @brief Return whether a specific analysis extension was successful */
+			template <typename Extension_type>
+			bool is_success() const
+			{
+				Extension_type* data = sp_data.get_extensions().template get<Extension_type>();
+				if (data == nullptr) {
+					std::cerr << "Error: analysis extension is not available." << std::endl;
+					return false;
+				}
+				return data->success();
+			}
 #endif // CONFIG_ANALYSIS_EXTENSIONS
 
 		private:
