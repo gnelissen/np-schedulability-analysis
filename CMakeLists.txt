@@ -11,7 +11,7 @@ option(USE_JE_MALLOC "Use the Facebook jemalloc scalable memory allocator" OFF)
 option(COLLECT_SCHEDULE_GRAPHS "Enable the collection of schedule graphs (disables parallel)" OFF)
 option(DEBUG "Enable debugging" OFF)
 option(USE_PRUNING "Enable pruning support during state-space exploration" OFF)
-option(ANALYSIS_EXTENSIONS "Enable analysis extensions for additional features (e.g., data age and reaction time in task chains analysis" OFF)
+option(ANALYSIS_EXTENSIONS "Enable analysis extensions for additional features (e.g., data age and reaction time in task chains analysis" ON)
 
 if (ANALYSIS_EXTENSIONS)
     add_compile_definitions(CONFIG_ANALYSIS_EXTENSIONS)

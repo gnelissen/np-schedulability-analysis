@@ -42,7 +42,7 @@ public:
 #ifdef _WIN32 
 		PROCESS_MEMORY_COUNTERS pmc;
 		GetProcessMemoryInfo(currentProcess, &pmc, sizeof(pmc));
-		return (long) (pmc.PeakWorkingSetSize / 1024); //in kiB
+		return pmc.PeakWorkingSetSize / 1024; //in kiB
 #else
 	if (getrusage(RUSAGE_SELF, const_cast<struct rusage*>(&u)) == 0)
 		return u.ru_maxrss;
