@@ -272,7 +272,7 @@ namespace NP {
 
 						// If at least one successor of j_pred has already been dispatched, and either it or j_pred has the same affinity as j_low, 
 						// then j_pred must have finished already when the first core on which j_low may be dispatched becomes available.
-						bool can_disregard = false;
+						/*bool can_disregard = false;
 						for (const auto &successor_suspension : successors_suspensions[pred_idx]) {
 							const auto& succ = *successor_suspension.first;
 							if (dispatched(n, succ) &&
@@ -281,7 +281,7 @@ namespace NP {
 								break;
 							}
 						}
-						if (can_disregard) continue;
+						if (can_disregard) continue;*/
 					}
 
 					// If j_pred is a predecessor of both j_high and j_low, we can disregard it if the maximum suspension from j_pred to j_high
