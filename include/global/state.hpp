@@ -342,9 +342,16 @@ namespace NP {
 							// go through all the conditional siblings
 							for (const auto& sibling : successors_of[from_job])
 							{
+								auto sib_job = sibling.first;
+								if (sib_job->get_affinity() != cluster) {
+									ready_time = Time_model::constants<Time>::infinity();
+									break;
+								}
 								Time susp_max = sibling.second.max();
 								ready_time = std::max(ready_time, ftimes.max() + susp_max);
-								ready_time = std::max(ready_time, sibling.first->latest_arrival());
+								ready_time = std::max(ready_time, sib_job->latest_arrival());
+								Time avail = clusters[cluster]->core_availability(sib_job->get_min_parallelism()).max();
+								ready_time = std::max(ready_time, avail);
 							}
 						}
 						else {

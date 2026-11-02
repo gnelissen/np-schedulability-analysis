@@ -811,7 +811,11 @@ namespace NP {
 					{
 						unsigned int p = it->first;
 						// Calculate t_wc and t_high
-						Time t_wc = std::max(cs.core_availability().max(), next_certain_job_ready_time(*n, *s, affinity));
+						Time job_ready_time = state_space_data.ready_times(*s, *j).max();
+						Time avail_time = cs.core_availability(j->get_min_parallelism()).max();
+						Time certain_dispatch_time = std::max(job_ready_time, avail_time);
+						Time t_wc = std::min(certain_dispatch_time,
+										std::max(cs.core_availability().max(), next_certain_job_ready_time(*n, *s, affinity)));
 
 						Time t_high_succ = state_space_data.next_certain_higher_priority_successor_job_ready_time(*n, *s, *j, p);
 						Time t_high_gang = state_space_data.next_certain_higher_priority_gang_source_job_ready_time(*n, *s, *j, p, t_wc + 1);
